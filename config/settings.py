@@ -73,26 +73,23 @@ WSGI_APPLICATION = "config.wsgi.application"
 # ===================== Banco de dados (MySQL) =====================
 # Detecta MySQL de duas formas:
 # 1) DB_ENGINE=mysql (seu .env)
-# 2) VARs do Railway (MYSQLHOST etc.)
 DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").lower()
-USING_RAILWAY_MYSQL = bool(os.getenv("MYSQLHOST"))
 
-if DB_ENGINE == "mysql" or USING_RAILWAY_MYSQL:
+if DB_ENGINE == "mysql" or os.getenv("MYSQLHOST"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            # Railway injeta MYSQLDATABASE/USER/PASSWORD/HOST/PORT
-            "NAME": os.getenv("MYSQLDATABASE", os.getenv("DB_NAME", "railway")),
+            "NAME": os.getenv("MYSQLDATABASE", os.getenv("DB_NAME", "app")),
             "USER": os.getenv("MYSQLUSER", os.getenv("DB_USER", "root")),
             "PASSWORD": os.getenv("MYSQLPASSWORD", os.getenv("DB_PASSWORD", "")),
             "HOST": os.getenv("MYSQLHOST", os.getenv("DB_HOST", "127.0.0.1")),
             "PORT": os.getenv("MYSQLPORT", os.getenv("DB_PORT", "3306")),
             "OPTIONS": {
                 "charset": "utf8mb4",
-                # mais seguro/robusto para integridade:
                 "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+                # TLS obrigatório no PlanetScale (CA padrão do container)
+                "ssl": {"ca": os.getenv("MYSQL_SSL_CA", "/etc/ssl/certs/ca-certificates.crt")},
             },
-            # Conexões persistentes (ajuda no Railway)
             "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", "60")),
         }
     }
@@ -143,7 +140,6 @@ REST_FRAMEWORK = {
 
 # ===================== CORS =====================
 # Dev: http://localhost:3000, http://127.0.0.1:3000
-# Produção: adicione https://seu-frontend.railway.app
 CORS_ALLOWED_ORIGINS = [
     *[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()],
 ]

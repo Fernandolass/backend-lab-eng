@@ -8,7 +8,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-unsafe")
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
 # Ex.: "localhost,127.0.0.1,seu-backend.up.railway.app"
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("https://jota-nunes.onrender.com/", "localhost,127.0.0.1").split(",") if h.strip()]
 
 # CSRF_TRUSTED_ORIGINS precisa ter http(s)://
 _raw_csrf = os.getenv("CSRF_TRUSTED_ORIGINS", "")
@@ -74,23 +74,16 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Detecta MySQL de duas formas:
 # 1) DB_ENGINE=mysql (seu .env)
 DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").lower()
-
-if DB_ENGINE == "mysql" or os.getenv("MYSQLHOST"):
+if DB_ENGINE == "mysql":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": os.getenv("MYSQLDATABASE", os.getenv("DB_NAME", "app")),
-            "USER": os.getenv("MYSQLUSER", os.getenv("DB_USER", "root")),
-            "PASSWORD": os.getenv("MYSQLPASSWORD", os.getenv("DB_PASSWORD", "")),
-            "HOST": os.getenv("MYSQLHOST", os.getenv("DB_HOST", "127.0.0.1")),
-            "PORT": os.getenv("MYSQLPORT", os.getenv("DB_PORT", "3306")),
-            "OPTIONS": {
-                "charset": "utf8mb4",
-                "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
-                # TLS obrigatório no PlanetScale (CA padrão do container)
-                "ssl": {"ca": os.getenv("MYSQL_SSL_CA", "/etc/ssl/certs/ca-certificates.crt")},
-            },
-            "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", "60")),
+            "NAME": os.getenv("MYSQLDATABASE", "railway"),
+            "USER": os.getenv("MYSQLUSER", "root"),
+            "PASSWORD": os.getenv("MYSQLPASSWORD", ""),
+            "HOST": os.getenv("MYSQLHOST", "mysql.railway.internal"),
+            "PORT": os.getenv("MYSQLPORT", "3306"),
+            "OPTIONS": {"charset": "utf8mb4"},
         }
     }
 else:

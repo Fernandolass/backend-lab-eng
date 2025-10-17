@@ -1,0 +1,157 @@
+from pathlib import Path
+import os
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ===================== Básico / .env =====================
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-unsafe")
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+
+# Ex.: "localhost,127.0.0.1,seu-backend.up.railway.app"
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+
+# CSRF_TRUSTED_ORIGINS precisa ter http(s)://
+_raw_csrf = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in _raw_csrf.split(",")
+    if o.strip() and o.strip().startswith(("http://", "https://"))
+]
+
+# ===================== Apps =====================
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+
+    # terceiros
+    "rest_framework",
+    "corsheaders",
+
+    # locais
+    "api",
+]
+
+AUTH_USER_MODEL = "api.Usuario"
+
+# ===================== Middleware =====================
+# (CORS antes de CommonMiddleware)
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+# ===================== Banco de dados (MySQL) =====================
+# Detecta MySQL de duas formas:
+# 1) DB_ENGINE=mysql (seu .env)
+# 2) VARs do Railway (MYSQLHOST etc.)
+DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").lower()
+USING_RAILWAY_MYSQL = bool(os.getenv("MYSQLHOST"))
+
+if DB_ENGINE == "mysql" or USING_RAILWAY_MYSQL:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            # Railway injeta MYSQLDATABASE/USER/PASSWORD/HOST/PORT
+            "NAME": os.getenv("MYSQLDATABASE", os.getenv("DB_NAME", "railway")),
+            "USER": os.getenv("MYSQLUSER", os.getenv("DB_USER", "root")),
+            "PASSWORD": os.getenv("MYSQLPASSWORD", os.getenv("DB_PASSWORD", "")),
+            "HOST": os.getenv("MYSQLHOST", os.getenv("DB_HOST", "127.0.0.1")),
+            "PORT": os.getenv("MYSQLPORT", os.getenv("DB_PORT", "3306")),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+                # mais seguro/robusto para integridade:
+                "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+            # Conexões persistentes (ajuda no Railway)
+            "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", "60")),
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+# ===================== Auth / Senhas =====================
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+
+# ===================== Localização =====================
+LANGUAGE_CODE = "pt-br"
+TIME_ZONE = "America/Sao_Paulo"
+USE_I18N = True
+USE_TZ = True
+
+# ===================== Arquivos estáticos =====================
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.getenv("MEDIA_ROOT", BASE_DIR / "media")
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ===================== DRF / JWT =====================
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+# ===================== CORS =====================
+# Dev: http://localhost:3000, http://127.0.0.1:3000
+# Produção: adicione https://seu-frontend.railway.app
+CORS_ALLOWED_ORIGINS = [
+    *[o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()],
+]
+CORS_ALLOW_CREDENTIALS = True
+
+# ===================== Proxy HTTPS (Railway) =====================
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Cookies seguros em produção (opcional, mas recomendado)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG

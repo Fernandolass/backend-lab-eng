@@ -1,0 +1,20 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
+
+router = DefaultRouter()
+router.register(r'usuarios', views.UsuarioViewSet, basename='usuarios')                 # leitura
+router.register(r'usuarios-admin', views.UsuarioAdminViewSet, basename='usuarios-admin')# CRUD admin
+router.register(r'projetos', views.ProjetoViewSet, basename='projetos')
+router.register(r'ambientes', views.AmbienteViewSet, basename='ambientes')
+router.register(r'logs', views.LogViewSet, basename='logs')
+router.register(r'modelos-documento', views.ModeloDocumentoViewSet, basename='modelos-documento')
+router.register(r'materiais', views.MaterialSpecViewSet, basename='materiais')
+router.register(r'tipos-ambiente', views.TipoAmbienteViewSet, basename='tipos-ambiente')
+router.register(r'marcas', views.MarcaViewSet, basename='marcas')    
+
+urlpatterns = [
+    path('', include(router.urls)),
+    path('dashboard-stats/', views.dashboard_stats, name='dashboard-stats'),
+    path('stats-mensais/', views.stats_mensais, name='stats-mensais'),
+]

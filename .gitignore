@@ -29,7 +29,6 @@ db.sqlite3
 media/
 staticfiles/
 *.log
-start.sh
 
 # Byte-compiled / optimized / DLL files
 *.pyo

@@ -8,9 +8,8 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-unsafe")
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
 # Ex.: "localhost,127.0.0.1,seu-backend.up.railway.app"
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("https://jota-nunes.onrender.com/", "localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
-# CSRF_TRUSTED_ORIGINS precisa ter http(s)://
 _raw_csrf = os.getenv("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [
     o.strip()

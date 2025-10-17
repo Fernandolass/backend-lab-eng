@@ -80,9 +80,13 @@ if DB_ENGINE == "mysql":
             "NAME": os.getenv("MYSQLDATABASE", "railway"),
             "USER": os.getenv("MYSQLUSER", "root"),
             "PASSWORD": os.getenv("MYSQLPASSWORD", ""),
-            "HOST": os.getenv("MYSQLHOST", "mysql.railway.internal"),
+            "HOST": os.getenv("MYSQLHOST", "localhost"),
             "PORT": os.getenv("MYSQLPORT", "3306"),
-            "OPTIONS": {"charset": "utf8mb4"},
+            "OPTIONS": {
+                "charset": "utf8mb4",
+                "connect_timeout": 30,  # adiciona timeout mais longo
+            },
+            "CONN_MAX_AGE": 600,
         }
     }
 else:

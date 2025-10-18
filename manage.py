@@ -21,17 +21,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # 1. Executa as migrações automaticamente
-    os.system("python manage.py migrate --noinput")
-
-    # 2. Cria superusuário padrão se não existir
-    User = get_user_model()
-    if not User.objects.filter(email="admin@jotanunes.com").exists():
-        User.objects.create_superuser(
-            username="admin",
-            email="admin@jotanunes.com",
-            password="admin123",
-            cargo="superadmin",
-        )
-        print("✅ Superusuário criado: admin@jotanunes.com / admin123")

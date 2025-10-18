@@ -1,5 +1,7 @@
+import os
 #!/bin/bash
 echo "🚀 Rodando migrações..."
+os.system("python manage.py migrate --noinput")
 python manage.py migrate --noinput
 
 echo "📦 Coletando arquivos estáticos..."

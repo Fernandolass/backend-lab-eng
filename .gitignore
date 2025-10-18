@@ -2,14 +2,17 @@
 # FRONTEND (React)
 # =========================
 node_modules/
-.pnp
+.pnp/
 .pnp.js
 coverage/
 build/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+
+# Se usar npm, mantenha o package-lock.json versionado
+# Se usar yarn, ignore abaixo
+# package-lock.json
 
 # React environment files
 .env.local
@@ -22,26 +25,26 @@ package-lock.json
 # =========================
 venv/
 *.pyc
-api/__pycache__
+__pycache__/
+*.pyo
+*.pyd
+*.so
 *.sqlite3
-db.sqlite3
 .env
+
+# Arquivos e diretórios gerados em runtime
 media/
 staticfiles/
 *.log
 
-# Byte-compiled / optimized / DLL files
-*.pyo
-*.pyd
-*.so
-
-# Migrations (opcional, se quiser manter limpo e gerar só no deploy)
-# **Cuidado: só ignore se estiver versionando migrações manualmente**
+# =========================
+# MIGRATIONS
+# (Mantenha versionadas, a menos que controle manualmente)
 # */migrations/__pycache__/
 # */migrations/*.py
 
 # =========================
-# SISTEMA/IDE
+# SISTEMA / IDE
 # =========================
 .DS_Store
 Thumbs.db
@@ -50,13 +53,17 @@ Thumbs.db
 *.iml
 
 # =========================
-# RAILWAY / DEPLOY
+# DEPLOY (Heroku / Railway)
 # =========================
-# Cache de build e coletados
-*.log
 *.pid
 *.seed
 *.bak
 *.swp
 *.swo
-api/__pycache__/__init__.cpython-311.pyc
+
+# =========================
+# OUTROS
+# =========================
+# Arquivos temporários ou de cache
+*.tmp
+*.cache

@@ -214,17 +214,17 @@ class MaterialSpec(models.Model):
 
         # Dicionário oficial de mapeamento Material → Marcas
         padroes = {
-            "cerâmic": ("Cerâmica", "Incesa, Portobello, Arielle, Tecnogres, Pamesa, Camelo Fior, Biancogrês, Pointer."),
+            "cerâmica": ("Cerâmica", "Incesa, Portobello, Arielle, Tecnogres, Pamesa, Camelo Fior, Biancogrês, Pointer."),
             "porcelanato": ("Porcelanato", "Portobello, Arielle, Tecnogres, Pamesa, Biancogrês, Elizabeth, Ceusa, Pointer, Villagres."),
-            "laminad": ("Laminado", "Eucatex, Durafloor ou Espaçofloor."),
-            "esquadr": ("Esquadria", "Esaf, Alumasa, Atlantica, Ramassol ou Unicasa."),
+            "laminado": ("Laminado", "Eucatex, Durafloor ou Espaçofloor."),
+            "esquadria": ("Esquadria", "Esaf, Alumasa, Atlantica, Ramassol ou Unicasa."),
             "ferragem": ("Ferragem", "Silvana, Stam, Arouca, Soprano, Aliança, Imab."),
-            "elétric": ("Inst. Elétrica", "Alumbra, Steck, Ilumi, Schneider, Margirius ou Fame."),
+            "elétrica": ("Inst. Elétrica", "Alumbra, Steck, Ilumi, Schneider, Margirius ou Fame."),
             "metal": ("Metal Sanitário", "Forusi, Deca, Celite, Fabrimar ou Docol."),
             "louça": ("Louças", "Celite, Deca, Incepa."),
-            "porta": ("Porta (alumínio)", "Esaf, Mgm, Alumasa, Atlantica, Ramassol ou Unicasa."),
-            "inox": ("Cuba (inox)", "Ghel Plus, Frank, Tramontina ou Pianox, Tecnocuba."),
-            "cuba": ("Cuba (louça)", "Celite, Deca, Incepa."),
+            "porta(alumínio)": ( "Esaf, Mgm, Alumasa, Atlantica, Ramassol ou Unicasa."),
+            "cuba(inox)": ("Ghel Plus, Frank, Tramontina ou Pianox, Tecnocuba."),
+            "cuba(louça)": ("Celite, Deca, Incepa."),
         }
 
         for chave, (material_nome, marcas_padrao) in padroes.items():

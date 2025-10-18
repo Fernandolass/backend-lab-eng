@@ -1,5 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
 from . import views
 
 router = DefaultRouter()
@@ -12,9 +14,11 @@ router.register(r'modelos-documento', views.ModeloDocumentoViewSet, basename='mo
 router.register(r'materiais', views.MaterialSpecViewSet, basename='materiais')
 router.register(r'tipos-ambiente', views.TipoAmbienteViewSet, basename='tipos-ambiente')
 router.register(r'marcas', views.MarcaViewSet, basename='marcas')    
+router.register(r'marcas-descricao', views.DescricaoMarcaViewSet, basename='marcas-descricao')
 
 urlpatterns = [
     path('', include(router.urls)),
     path('dashboard-stats/', views.dashboard_stats, name='dashboard-stats'),
     path('stats-mensais/', views.stats_mensais, name='stats-mensais'),
+    path("api/token/", TokenObtainPairView.as_view(serializer_class=CustomTokenObtainPairSerializer), name="token_obtain_pair"),
 ]

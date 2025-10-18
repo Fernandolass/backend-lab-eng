@@ -1,6 +1,23 @@
 from rest_framework import serializers
-from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca
+from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
+from django.contrib.auth import authenticate
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    username_field = 'email'  # 👈 força login por email
+
+    def validate(self, attrs):
+        email = attrs.get("email")
+        password = attrs.get("password")
+
+        user = authenticate(email=email, password=password)
+        if not user:
+            raise serializers.ValidationError("Email ou senha incorretos")
+
+        data = super().validate(attrs)
+        return data
 
 # modelo de Usuário
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -19,6 +36,11 @@ class MarcaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Marca
         fields = ['id', 'nome', 'created_at']
+
+class DescricaoMarcaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DescricaoMarca
+        fields = ['id', 'material', 'marcas', 'projeto']
 
 # modelo de Ambiente
 class MaterialSpecSerializer(serializers.ModelSerializer):

@@ -8,11 +8,11 @@ from django.utils import timezone
 from django.db.models.functions import TruncMonth  
 from django.db.models import Count 
 
-from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca
+from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from .serializers import (
     UsuarioSerializer, ProjetoSerializer, AmbienteSerializer,
     LogSerializer, ModeloDocumentoSerializer, MyTokenObtainPairSerializer,
-    MaterialSpecSerializer, TipoAmbienteSerializer, MarcaSerializer
+    MaterialSpecSerializer, TipoAmbienteSerializer, MarcaSerializer, DescricaoMarcaSerializer
 )
 from .permissions import (
     AllowCreateForBasicButNoEdit, AllowWriteForManagerUp, OnlySuperadminDelete
@@ -112,6 +112,24 @@ class TipoAmbienteViewSet(viewsets.ModelViewSet):
             return [AllowWriteForManagerUp()]
         return [permissions.IsAuthenticated()]
 
+
+class DescricaoMarcaViewSet(viewsets.ModelViewSet):
+    queryset = DescricaoMarca.objects.all()
+    serializer_class = DescricaoMarcaSerializer
+
+    def get_queryset(self):
+        projeto_id = self.request.query_params.get('projeto')
+        if projeto_id:
+            return DescricaoMarca.objects.filter(projeto_id=projeto_id)
+        return DescricaoMarca.objects.all()
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.IsAuthenticated()]
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [AllowWriteForManagerUp()]
+        return [permissions.IsAuthenticated()]
+
 # ---------------- AMBIENTES ----------------
 class AmbienteViewSet(viewsets.ModelViewSet):
     queryset = Ambiente.objects.all()
@@ -205,14 +223,25 @@ class MarcaViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
     
 class MaterialSpecViewSet(viewsets.ModelViewSet):
-    queryset = MaterialSpec.objects.select_related('ambiente', 'aprovador', 'marca', 'ambiente__projeto')
     serializer_class = MaterialSpecSerializer
+
+    def get_queryset(self):
+        # Busca materiais, com relacionamentos otimizados
+        queryset = MaterialSpec.objects.select_related(
+            'ambiente', 'aprovador', 'marca', 'ambiente__projeto'
+        )
+
+        # 🔍 Filtro por ambiente (GET /api/materiais/?ambiente=ID)
+        ambiente_id = self.request.query_params.get('ambiente')
+        if ambiente_id:
+            queryset = queryset.filter(ambiente_id=ambiente_id)
+
+        return queryset
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [permissions.IsAuthenticated()]
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
-            # criação/edição de materiais: gerente+
             return [AllowWriteForManagerUp()]
         if self.action in ['aprovar', 'reprovar', 'reverter']:
             return [AllowWriteForManagerUp()]
@@ -232,8 +261,10 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = timezone.now()
         m.motivo = ''
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
-        Log.objects.create(usuario=request.user, acao='APROVACAO', projeto=m.ambiente.projeto,
-                           motivo=f'Item {m.get_item_display()} aprovado')
+        Log.objects.create(
+            usuario=request.user, acao='APROVACAO', projeto=m.ambiente.projeto,
+            motivo=f'Item {m.get_item_display()} aprovado'
+        )
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
@@ -245,8 +276,10 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = timezone.now()
         m.motivo = motivo
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
-        Log.objects.create(usuario=request.user, acao='REPROVACAO', projeto=m.ambiente.projeto,
-                           motivo=f'Item {m.get_item_display()} reprovado: {motivo}')
+        Log.objects.create(
+            usuario=request.user, acao='REPROVACAO', projeto=m.ambiente.projeto,
+            motivo=f'Item {m.get_item_display()} reprovado: {motivo}'
+        )
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])
@@ -257,8 +290,10 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = None
         m.motivo = ''
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
-        Log.objects.create(usuario=request.user, acao='EDICAO', projeto=m.ambiente.projeto,
-                           motivo=f'Item {m.get_item_display()} revertido para pendente')
+        Log.objects.create(
+            usuario=request.user, acao='EDICAO', projeto=m.ambiente.projeto,
+            motivo=f'Item {m.get_item_display()} revertido para pendente'
+        )
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])

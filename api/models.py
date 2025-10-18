@@ -4,6 +4,8 @@ from django.db import models
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 #Modelo de Usuário 
 class Usuario(AbstractUser):
@@ -29,6 +31,7 @@ class Projeto(models.Model):
         ('APROVADO', 'Aprovado'),
         ('REPROVADO', 'Reprovado'),
     ]
+    default="PENDENTE",
     
     TIPO_PROJETO_CHOICES = [
         ('RESIDENCIAL', 'Residencial'),
@@ -42,6 +45,7 @@ class Projeto(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
     responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='projetos_criados')
     
+    observacoes_gerais = models.TextField(blank=True, null=True)
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_atualizacao = models.DateTimeField(auto_now=True)
 
@@ -53,8 +57,13 @@ class Projeto(models.Model):
         return self.nome_do_projeto
 
 class Ambiente(models.Model):
+    CATEGORIA_CHOICES = [
+        ('PRIVATIVA', 'Unidade Privativa'),
+        ('COMUM', 'Área Comum'),
+        ('EXTERNA', 'Área Externa'),
+    ]
     projeto = models.ForeignKey(Projeto, on_delete=models.CASCADE, related_name='ambientes')
-    
+    categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='PRIVATIVA')
     nome_do_ambiente = models.CharField(max_length=100)
     guia_de_cores = models.CharField(max_length=255, blank=True)
 
@@ -142,6 +151,17 @@ Ambiente.add_to_class('tipo', models.ForeignKey(
     TipoAmbiente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ambientes'
 ))
 
+class DescricaoMarca(models.Model):
+    material = models.CharField(max_length=100)
+    marcas = models.TextField()
+    projeto = models.ForeignKey(Projeto, on_delete=models.CASCADE, related_name='descricao_marcas')
+
+    class Meta:
+        verbose_name = "Descrição de Marca"
+        verbose_name_plural = "Descrição das Marcas"
+
+    def __str__(self):
+        return f"{self.material}: {self.marcas[:40]}..."
 
 class MaterialSpec(models.Model):
     STATUS = (
@@ -185,3 +205,39 @@ class MaterialSpec(models.Model):
 
     def __str__(self):
         return f'{self.ambiente} - {self.get_item_display()}'
+    
+    def criar_descricao_marca_automatica(sender, instance, created, **kwargs):
+        if not instance.descricao:
+            return
+
+        desc = instance.descricao.lower()
+
+        # Dicionário oficial de mapeamento Material → Marcas
+        padroes = {
+            "cerâmic": ("Cerâmica", "Incesa, Portobello, Arielle, Tecnogres, Pamesa, Camelo Fior, Biancogrês, Pointer."),
+            "porcelanato": ("Porcelanato", "Portobello, Arielle, Tecnogres, Pamesa, Biancogrês, Elizabeth, Ceusa, Pointer, Villagres."),
+            "laminad": ("Laminado", "Eucatex, Durafloor ou Espaçofloor."),
+            "esquadr": ("Esquadria", "Esaf, Alumasa, Atlantica, Ramassol ou Unicasa."),
+            "ferragem": ("Ferragem", "Silvana, Stam, Arouca, Soprano, Aliança, Imab."),
+            "elétric": ("Inst. Elétrica", "Alumbra, Steck, Ilumi, Schneider, Margirius ou Fame."),
+            "metal": ("Metal Sanitário", "Forusi, Deca, Celite, Fabrimar ou Docol."),
+            "louça": ("Louças", "Celite, Deca, Incepa."),
+            "porta": ("Porta (alumínio)", "Esaf, Mgm, Alumasa, Atlantica, Ramassol ou Unicasa."),
+            "inox": ("Cuba (inox)", "Ghel Plus, Frank, Tramontina ou Pianox, Tecnocuba."),
+            "cuba": ("Cuba (louça)", "Celite, Deca, Incepa."),
+        }
+
+        for chave, (material_nome, marcas_padrao) in padroes.items():
+            if chave in desc:
+                projeto = instance.ambiente.projeto
+                from .models import DescricaoMarca
+
+                if not DescricaoMarca.objects.filter(
+                    projeto=projeto, material__iexact=material_nome
+                ).exists():
+                    DescricaoMarca.objects.create(
+                        projeto=projeto,
+                        material=material_nome,
+                        marcas=marcas_padrao
+                    )
+                break

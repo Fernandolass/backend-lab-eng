@@ -226,16 +226,12 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     serializer_class = MaterialSpecSerializer
 
     def get_queryset(self):
-        # Busca materiais, com relacionamentos otimizados
         queryset = MaterialSpec.objects.select_related(
             'ambiente', 'aprovador', 'marca', 'ambiente__projeto'
         )
-
-        # 🔍 Filtro por ambiente (GET /api/materiais/?ambiente=ID)
         ambiente_id = self.request.query_params.get('ambiente')
         if ambiente_id:
             queryset = queryset.filter(ambiente_id=ambiente_id)
-
         return queryset
 
     def get_permissions(self):
@@ -253,6 +249,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Item aprovado não pode ser editado. Use reverter.')
         serializer.save()
 
+    # ✅ Aprovar material individual
     @action(detail=True, methods=['post'])
     def aprovar(self, request, pk=None):
         m = self.get_object()
@@ -261,12 +258,18 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = timezone.now()
         m.motivo = ''
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+
+        # cria log
         Log.objects.create(
-            usuario=request.user, acao='APROVACAO', projeto=m.ambiente.projeto,
+            usuario=request.user,
+            acao='APROVACAO',
+            projeto=m.ambiente.projeto,
             motivo=f'Item {m.get_item_display()} aprovado'
         )
+
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
+    # ❌ Reprovar material individual
     @action(detail=True, methods=['post'])
     def reprovar(self, request, pk=None):
         m = self.get_object()
@@ -276,12 +279,17 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = timezone.now()
         m.motivo = motivo
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+
         Log.objects.create(
-            usuario=request.user, acao='REPROVACAO', projeto=m.ambiente.projeto,
+            usuario=request.user,
+            acao='REPROVACAO',
+            projeto=m.ambiente.projeto,
             motivo=f'Item {m.get_item_display()} reprovado: {motivo}'
         )
+
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
+    # ↩️ Reverter para pendente
     @action(detail=True, methods=['post'])
     def reverter(self, request, pk=None):
         m = self.get_object()
@@ -290,10 +298,14 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.data_aprovacao = None
         m.motivo = ''
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+
         Log.objects.create(
-            usuario=request.user, acao='EDICAO', projeto=m.ambiente.projeto,
+            usuario=request.user,
+            acao='EDICAO',
+            projeto=m.ambiente.projeto,
             motivo=f'Item {m.get_item_display()} revertido para pendente'
         )
+
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])

@@ -6,7 +6,7 @@ from django.contrib.auth import authenticate
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    username_field = 'email'  # 👈 força login por email
+    username_field = 'email'  # força login por email
 
     def validate(self, attrs):
         email = attrs.get("email")

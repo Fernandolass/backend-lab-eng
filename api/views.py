@@ -76,7 +76,7 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         if cargo == "cliente":
             cargo = "atendente"
 
-        # gerente e superadmin veem tudo; atendente também só leitura (como você definiu)
+        # gerente e superadmin veem tudo; atendente também só leitura 
         return qs
 
     def perform_create(self, serializer):
@@ -269,7 +269,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
 
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
-    # ❌ Reprovar material individual
+    # Reprovar material individual
     @action(detail=True, methods=['post'])
     def reprovar(self, request, pk=None):
         m = self.get_object()
@@ -289,7 +289,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
 
         return Response({'status': m.status}, status=status.HTTP_200_OK)
 
-    # ↩️ Reverter para pendente
+    # Reverter para pendente
     @action(detail=True, methods=['post'])
     def reverter(self, request, pk=None):
         m = self.get_object()

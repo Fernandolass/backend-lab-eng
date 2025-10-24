@@ -13,7 +13,6 @@ class CustomUserAdmin(UserAdmin):
         (None, {'fields': ('cargo',)}),
     )
 
-# Registra os modelos
 admin.site.register(Usuario, CustomUserAdmin)
 admin.site.register(Projeto)
 admin.site.register(Ambiente)

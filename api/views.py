@@ -249,7 +249,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Item aprovado não pode ser editado. Use reverter.')
         serializer.save()
 
-    # ✅ Aprovar material individual
+    #  Aprovar material individual
     @action(detail=True, methods=['post'])
     def aprovar(self, request, pk=None):
         m = self.get_object()

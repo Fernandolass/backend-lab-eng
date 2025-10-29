@@ -78,12 +78,11 @@ class ProjetoViewSet(viewsets.ModelViewSet):
 
         # gerente e superadmin veem tudo; atendente também só leitura 
         return qs
-
     def perform_create(self, serializer):
         projeto = serializer.save(responsavel=self.request.user)
         Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
 
-        from .models import MaterialSpec
+        from .models import MaterialSpec, Ambiente
 
         print(f"🚀 Criando materiais para o projeto: {projeto.nome_do_projeto}")
 
@@ -91,9 +90,21 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         for ambiente in projeto.ambientes.all():
             print(f"   → Ambiente vinculado: {ambiente.nome_do_ambiente}")
 
-            # 🔹 Busca os materiais base desse ambiente (sem projeto)
-            materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente__nome_do_ambiente=ambiente.nome_do_ambiente)
+            # 🔍 Busca o ambiente base global (sem projeto)
+            ambiente_base = (
+                Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
+                .order_by("id")
+                .first()
+            )
 
+            if not ambiente_base:
+                print(f"⚠️ Nenhum ambiente base encontrado para {ambiente.nome_do_ambiente}")
+                continue
+
+            # 🔹 Busca materiais base do ambiente global
+            materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente=ambiente_base)
+
+            # 🔹 Cria materiais no projeto atual (sem duplicar)
             for base in materiais_base:
                 MaterialSpec.objects.get_or_create(
                     projeto=projeto,
@@ -105,7 +116,7 @@ class ProjetoViewSet(viewsets.ModelViewSet):
                     },
                 )
 
-        print(f"✅ Materiais criados com sucesso para {projeto.nome_do_projeto}")
+        print(f"✅ Materiais replicados com sucesso para {projeto.nome_do_projeto}")
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
         projeto = self.get_object()
@@ -134,7 +145,6 @@ class TipoAmbienteViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [AllowWriteForManagerUp()]
         return [permissions.IsAuthenticated()]
-
 
 class DescricaoMarcaViewSet(viewsets.ModelViewSet):
     queryset = DescricaoMarca.objects.all()
@@ -267,6 +277,8 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     serializer_class = MaterialSpecSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
+
         queryset = MaterialSpec.objects.select_related(
             "ambiente", "aprovador", "marca", "projeto"
         ).order_by("ambiente_id", "item")
@@ -274,11 +286,23 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         projeto_id = self.request.query_params.get("projeto")
         ambiente_id = self.request.query_params.get("ambiente")
 
-        # 🔹 Se vier ambos, filtra pelos dois
+        # ✅ Novo filtro robusto — cobre tanto MaterialSpec com projeto_id
+        # quanto os que só estão ligados via ambiente__projetos
         if projeto_id and ambiente_id:
-            queryset = queryset.filter(projeto_id=projeto_id, ambiente_id=ambiente_id)
+            queryset = queryset.filter(
+                Q(ambiente_id=ambiente_id) &
+                (
+                    Q(projeto_id=projeto_id)
+                    | Q(ambiente__projetos__id=projeto_id)
+                    | Q(projeto__isnull=True)  # ✅ inclui materiais base
+                )
+            ).distinct()
         elif projeto_id:
-            queryset = queryset.filter(projeto_id=projeto_id)
+            queryset = queryset.filter(
+                Q(projeto_id=projeto_id)
+                | Q(ambiente__projetos__id=projeto_id)
+                | Q(projeto__isnull=True)  # ✅ também inclui base se ambiente não vier
+            ).distinct()
         elif ambiente_id:
             queryset = queryset.filter(ambiente_id=ambiente_id)
 

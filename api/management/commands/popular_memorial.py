@@ -132,10 +132,11 @@ class Command(BaseCommand):
                 defaults={"categoria": data["categoria"]}
             )
             for item, descricao in data["materiais"].items():
-                MaterialSpec.objects.get_or_create(
+                MaterialSpec.objects.update_or_create(
                     ambiente=amb,
                     item=item,
-                    defaults={"descricao": descricao},
+                    projeto=None,  # 🔹 garante que é o modelo base
+                    defaults={"descricao": descricao, "status": "PENDENTE"},
                 )
 
         # ==============================
@@ -156,9 +157,10 @@ class Command(BaseCommand):
         }
 
         for material, marcas_txt in marcas.items():
-            DescricaoMarca.objects.get_or_create(
+            DescricaoMarca.objects.update_or_create(
                 material=material,
-                defaults={"marcas": marcas_txt, "projeto_id": None}
+                projeto_id=None,
+                defaults={"marcas": marcas_txt},
             )
 
         self.stdout.write(self.style.SUCCESS("✅ Banco populado com sucesso!"))

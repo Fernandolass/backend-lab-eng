@@ -82,7 +82,14 @@ class ProjetoViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         projeto = serializer.save(responsavel=self.request.user)
         Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
-
+        for ambiente in projeto.ambientes.all():
+            for item, _ in MaterialSpec.ITENS:
+                MaterialSpec.objects.get_or_create(
+                    projeto=projeto,
+                    ambiente=ambiente,
+                    item=item,
+                    defaults={"descricao": ""}
+                )
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
         projeto = self.get_object()
@@ -227,7 +234,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = MaterialSpec.objects.select_related(
-            'ambiente', 'aprovador', 'marca', 'ambiente__projeto'
+            'ambiente', 'aprovador', 'marca'
         )
         ambiente_id = self.request.query_params.get('ambiente')
         if ambiente_id:
@@ -260,10 +267,12 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
 
         # cria log
+        projeto = m.ambiente.projetos.first()
+
         Log.objects.create(
             usuario=request.user,
             acao='APROVACAO',
-            projeto=m.ambiente.projeto,
+            projeto=projeto,
             motivo=f'Item {m.get_item_display()} aprovado'
         )
 
@@ -274,6 +283,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     def reprovar(self, request, pk=None):
         m = self.get_object()
         motivo = request.data.get('motivo', '')
+
         m.status = 'REPROVADO'
         m.aprovador = request.user
         m.data_aprovacao = timezone.now()
@@ -283,7 +293,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         Log.objects.create(
             usuario=request.user,
             acao='REPROVACAO',
-            projeto=m.ambiente.projeto,
+            projeto=m.projeto,  # ✅ AGORA VEM DIRETO DO MATERIAL
             motivo=f'Item {m.get_item_display()} reprovado: {motivo}'
         )
 
@@ -292,21 +302,27 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     # Reverter para pendente
     @action(detail=True, methods=['post'])
     def reverter(self, request, pk=None):
-        m = self.get_object()
-        m.status = 'PENDENTE'
-        m.aprovador = None
-        m.data_aprovacao = None
-        m.motivo = ''
-        m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+        projeto = self.get_object()
+        projeto.status = "PENDENTE"
+        projeto.save(update_fields=["status", "data_atualizacao"])
+
+        # reverte todos os materiais do projeto
+        from .models import MaterialSpec
+        MaterialSpec.objects.filter(ambiente__projetos=projeto).update(
+            status="PENDENTE",
+            aprovador=None,
+            data_aprovacao=None,
+            motivo=""
+        )
 
         Log.objects.create(
             usuario=request.user,
-            acao='EDICAO',
-            projeto=m.ambiente.projeto,
-            motivo=f'Item {m.get_item_display()} revertido para pendente'
+            acao="EDICAO",
+            projeto=projeto,
+            motivo="Projeto revertido para pendente com todos os itens."
         )
 
-        return Response({'status': m.status}, status=status.HTTP_200_OK)
+        return Response({"status": projeto.status}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

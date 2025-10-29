@@ -47,19 +47,18 @@ class MaterialSpecSerializer(serializers.ModelSerializer):
     aprovador_email = serializers.EmailField(source='aprovador.email', read_only=True)
     item_label = serializers.CharField(source='get_item_display', read_only=True)
     marca_nome = serializers.CharField(source='marca.nome', read_only=True)
-
+    ambiente_nome = serializers.CharField(source='ambiente.nome_do_ambiente', read_only=True)
+    ambiente_categoria = serializers.CharField(source='ambiente.categoria', read_only=True)
     class Meta:
         model = MaterialSpec
         fields = ['id', 'ambiente', 'item', 'item_label', 'descricao',
-                  'marca', 'marca_nome',
+                  'marca', 'marca_nome', 'ambiente_nome', 'ambiente_categoria',
                   'status', 'motivo', 'aprovador', 'aprovador_email',
                   'data_aprovacao', 'updated_at']
         read_only_fields = ['aprovador', 'aprovador_email', 'data_aprovacao', 'updated_at']
 
 class AmbienteSerializer(serializers.ModelSerializer):
     materials = MaterialSpecSerializer(many=True, read_only=True)
-    tipo_nome = serializers.CharField(source='tipo.nome', read_only=True)
-
     class Meta:
         model = Ambiente
         fields = '__all__'
@@ -67,25 +66,36 @@ class AmbienteSerializer(serializers.ModelSerializer):
 #  modelo de Projeto 
 class ProjetoSerializer(serializers.ModelSerializer):
     responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
-    
     ambientes = AmbienteSerializer(many=True, read_only=True)
+    ambientes_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Ambiente.objects.all(), write_only=True, source="ambientes"
+    )
+    descricao_marcas = DescricaoMarcaSerializer(many=True, read_only=True, source="descricaomarca_set")
 
     class Meta:
         model = Projeto
         fields = [
-            'id', 
-            'nome_do_projeto', 
-            'tipo_do_projeto', 
-            'data_entrega', 
-            'descricao', 
-            'status', 
-            'responsavel', 
-            'responsavel_nome', 
-            'data_criacao', 
+            'id',
+            'nome_do_projeto',
+            'tipo_do_projeto',
+            'data_entrega',
+            'descricao',
+            'status',
+            'responsavel',
+            'responsavel_nome',
+            'data_criacao',
             'data_atualizacao',
-            'ambientes', 
+            'ambientes',        # leitura detalhada
+            'ambientes_ids', 
+            'descricao_marcas',   # escrita com lista de IDs
         ]
-        read_only_fields = ['responsavel_nome', 'ambientes']
+    def validate_nome_do_projeto(self, value):
+        if Projeto.objects.filter(nome_do_projeto=value).exists():
+            raise serializers.ValidationError("Já existe um projeto com esse nome.")
+        return value
+    def create(self, validated_data):
+        validated_data["responsavel"] = self.context["request"].user
+        return super().create(validated_data)
 
 # Serializer para o modelo de Log
 class LogSerializer(serializers.ModelSerializer):

@@ -124,11 +124,6 @@ class Command(BaseCommand):
                     "Gradil": "Em perfil metálico pintado de branco.",
                 },
             },
-            # ⚠️ Aqui continuam TODOS os outros ambientes do DOC:
-            # Guarita, Gourmets, Quiosques, Copa Funcionários, Petplay, Parque Infantil,
-            # Brinquedoteca, Salão de Festas, Bicicletário, Salão de Jogos, Academia,
-            # Administração, Quadra Esportiva, Quadra de Areia, Piscina, Gerador, Casa de Lixo,
-            # Vestiário, Escadaria, Depósito, Muro, Hall, Instalações Gerais, Jardins, etc.
         }
 
         for nome, data in especificacao.items():

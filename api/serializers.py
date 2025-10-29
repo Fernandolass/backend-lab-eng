@@ -58,10 +58,19 @@ class MaterialSpecSerializer(serializers.ModelSerializer):
         read_only_fields = ['aprovador', 'aprovador_email', 'data_aprovacao', 'updated_at']
 
 class AmbienteSerializer(serializers.ModelSerializer):
-    materials = MaterialSpecSerializer(many=True, read_only=True)
+    materials = serializers.SerializerMethodField()
+
     class Meta:
         model = Ambiente
         fields = '__all__'
+
+    def get_materials(self, obj):
+        projeto = self.context.get("projeto") or self.context.get("view").kwargs.get("pk")
+        from .models import MaterialSpec
+        if not projeto:
+            return []
+        materiais = MaterialSpec.objects.filter(projeto_id=projeto, ambiente=obj)
+        return MaterialSpecSerializer(materiais, many=True).data
 
 #  modelo de Projeto 
 class ProjetoSerializer(serializers.ModelSerializer):
@@ -89,6 +98,15 @@ class ProjetoSerializer(serializers.ModelSerializer):
             'ambientes_ids', 
             'descricao_marcas',   # escrita com lista de IDs
         ]
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # 🔹 Filtra materiais de cada ambiente por este projeto
+        ambientes_data = []
+        for ambiente in instance.ambientes.all():
+            s = AmbienteSerializer(ambiente, context={"projeto": instance.id})
+            ambientes_data.append(s.data)
+        rep["ambientes"] = ambientes_data
+        return rep
     def validate_nome_do_projeto(self, value):
         if Projeto.objects.filter(nome_do_projeto=value).exists():
             raise serializers.ValidationError("Já existe um projeto com esse nome.")

@@ -6,6 +6,7 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.db.models.signals import m2m_changed
 
 #Modelo de Usuário 
 class Usuario(AbstractUser):
@@ -33,7 +34,7 @@ class Ambiente(models.Model):
         ('EXTERNA', 'Área Externa'),
     ]
 
-    nome_do_ambiente = models.CharField(max_length=100, unique=True)  # único por nome
+    nome_do_ambiente = models.CharField(max_length=100)  # único por nome
     categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='PRIVATIVA')
     guia_de_cores = models.CharField(max_length=255, blank=True)
 
@@ -106,8 +107,7 @@ class Log(models.Model):
     
     acao = models.CharField(max_length=20, choices=ACAO_CHOICES)
     
-    projeto = models.ForeignKey('Projeto', on_delete=models.CASCADE, related_name='logs', null=True, blank=True)
-    
+    projeto = models.ForeignKey('Projeto', on_delete=models.SET_NULL, null=True, blank=True, related_name='logs')  # ✅ recolocado
     motivo = models.TextField(blank=True, null=True) 
     data_hora = models.DateTimeField(auto_now_add=True)
 
@@ -184,7 +184,7 @@ class MaterialSpec(models.Model):
         ('INST_COMUNICACAO', 'Inst. Comunicação'),
     )
 
-    projeto = models.ForeignKey('Projeto', on_delete=models.CASCADE, related_name='materiais')
+    projeto = models.ForeignKey('Projeto', on_delete=models.CASCADE, related_name='materiais', null=True, blank = True)
     ambiente = models.ForeignKey('Ambiente', on_delete=models.CASCADE, related_name='materials')
     item = models.CharField(max_length=30, choices=ITENS)
     descricao = models.TextField(blank=True)
@@ -209,20 +209,22 @@ class MaterialSpec(models.Model):
     def criar_descricao_marca_automatica(sender, instance, created, **kwargs):
         if not instance.descricao:
             return
-
         desc = instance.descricao.lower()
 
-    @receiver(post_save, sender=Ambiente)
-    def criar_materiais_padrao(sender, instance, created, **kwargs):
-        """
-        Sempre que um Ambiente novo for criado,
-        gera automaticamente todos os MaterialSpec básicos.
-        """
-        if created:
-            from .models import MaterialSpec  # evitar import circular
-            for item, _ in MaterialSpec.ITENS:
-                MaterialSpec.objects.get_or_create(
-                    ambiente=instance,
-                    item=item,
-                    defaults={"descricao": ""}
-                )
+# @receiver(m2m_changed, sender=Projeto.ambientes.through)
+# def criar_materiais_quando_adicionar_ambiente(sender, instance, action, pk_set, **kwargs):
+#     """
+#     Sempre que ambientes são adicionados a um projeto,
+#     cria automaticamente os materiais padrão (piso, parede, teto etc).
+#     """
+#     if action == "post_add" and pk_set:
+#         from .models import MaterialSpec
+#         for ambiente_id in pk_set:
+#             ambiente = Ambiente.objects.get(pk=ambiente_id)
+#             for item, _ in MaterialSpec.ITENS:
+#                 MaterialSpec.objects.get_or_create(
+#                     projeto=instance,
+#                     ambiente=ambiente,
+#                     item=item,
+#                     defaults={"descricao": ""}
+#                 )

@@ -90,7 +90,7 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         for ambiente in projeto.ambientes.all():
             print(f"   → Ambiente vinculado: {ambiente.nome_do_ambiente}")
 
-            # 🔍 Busca o ambiente base global (sem projeto)
+            # 🔍 busca o ambiente base global (sem projeto vinculado)
             ambiente_base = (
                 Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
                 .order_by("id")
@@ -101,22 +101,26 @@ class ProjetoViewSet(viewsets.ModelViewSet):
                 print(f"⚠️ Nenhum ambiente base encontrado para {ambiente.nome_do_ambiente}")
                 continue
 
-            # 🔹 Busca materiais base do ambiente global
+            # 🔹 busca materiais base do ambiente global
             materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente=ambiente_base)
 
-            # 🔹 Cria materiais no projeto atual (sem duplicar)
+            # 🔹 cria materiais no projeto atual, evitando duplicados
             for base in materiais_base:
-                MaterialSpec.objects.get_or_create(
+                # evita recriação do mesmo item no mesmo projeto + ambiente
+                if MaterialSpec.objects.filter(
+                    projeto=projeto, ambiente=ambiente, item__iexact=base.item.strip()
+                ).exists():
+                    continue
+
+                MaterialSpec.objects.create(
                     projeto=projeto,
                     ambiente=ambiente,
-                    item=base.item,
-                    defaults={
-                        "descricao": base.descricao or "",
-                        "status": "PENDENTE",
-                    },
+                    item=base.item.strip(),
+                    descricao=base.descricao or "",
+                    status="PENDENTE",
                 )
 
-        print(f"✅ Materiais replicados com sucesso para {projeto.nome_do_projeto}")
+        print(f"✅ Materiais criados com sucesso para {projeto.nome_do_projeto}")
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
         projeto = self.get_object()

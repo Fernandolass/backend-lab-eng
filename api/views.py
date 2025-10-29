@@ -78,11 +78,49 @@ class ProjetoViewSet(viewsets.ModelViewSet):
 
         # gerente e superadmin veem tudo; atendente também só leitura 
         return qs
-
     def perform_create(self, serializer):
         projeto = serializer.save(responsavel=self.request.user)
         Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
 
+        from .models import MaterialSpec, Ambiente
+
+        print(f"🚀 Criando materiais para o projeto: {projeto.nome_do_projeto}")
+
+        # 🔹 para cada ambiente selecionado no projeto
+        for ambiente in projeto.ambientes.all():
+            print(f"   → Ambiente vinculado: {ambiente.nome_do_ambiente}")
+
+            # 🔍 busca o ambiente base global (sem projeto vinculado)
+            ambiente_base = (
+                Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
+                .order_by("id")
+                .first()
+            )
+
+            if not ambiente_base:
+                print(f"⚠️ Nenhum ambiente base encontrado para {ambiente.nome_do_ambiente}")
+                continue
+
+            # 🔹 busca materiais base do ambiente global
+            materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente=ambiente_base)
+
+            # 🔹 cria materiais no projeto atual, evitando duplicados
+            for base in materiais_base:
+                # evita recriação do mesmo item no mesmo projeto + ambiente
+                if MaterialSpec.objects.filter(
+                    projeto=projeto, ambiente=ambiente, item__iexact=base.item.strip()
+                ).exists():
+                    continue
+
+                MaterialSpec.objects.create(
+                    projeto=projeto,
+                    ambiente=ambiente,
+                    item=base.item.strip(),
+                    descricao=base.descricao or "",
+                    status="PENDENTE",
+                )
+
+        print(f"✅ Materiais criados com sucesso para {projeto.nome_do_projeto}")
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
         projeto = self.get_object()
@@ -112,16 +150,27 @@ class TipoAmbienteViewSet(viewsets.ModelViewSet):
             return [AllowWriteForManagerUp()]
         return [permissions.IsAuthenticated()]
 
-
 class DescricaoMarcaViewSet(viewsets.ModelViewSet):
     queryset = DescricaoMarca.objects.all()
     serializer_class = DescricaoMarcaSerializer
 
     def get_queryset(self):
-        projeto_id = self.request.query_params.get('projeto')
-        if projeto_id:
-            return DescricaoMarca.objects.filter(projeto_id=projeto_id)
-        return DescricaoMarca.objects.all()
+        queryset = MaterialSpec.objects.select_related(
+            "ambiente", "aprovador", "marca", "projeto"
+        ).order_by("ambiente_id", "item")
+
+        projeto_id = self.request.query_params.get("projeto")
+        ambiente_id = self.request.query_params.get("ambiente")
+
+        # 🔹 Se vier ambos, filtra pelos dois
+        if projeto_id and ambiente_id:
+            queryset = queryset.filter(projeto_id=projeto_id, ambiente_id=ambiente_id)
+        elif projeto_id:
+            queryset = queryset.filter(projeto_id=projeto_id)
+        elif ambiente_id:
+            queryset = queryset.filter(ambiente_id=ambiente_id)
+
+        return queryset
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -135,6 +184,12 @@ class AmbienteViewSet(viewsets.ModelViewSet):
     queryset = Ambiente.objects.all()
     serializer_class = AmbienteSerializer
 
+    def get_queryset(self):
+        queryset = Ambiente.objects.all().order_by("nome_do_ambiente")
+        apenas_disponiveis = self.request.query_params.get("disponiveis")
+        if apenas_disponiveis:
+            return queryset
+        return queryset.order_by("nome_do_ambiente")
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
             return [permissions.IsAuthenticated()]  # todos logados leem
@@ -226,12 +281,35 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     serializer_class = MaterialSpecSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
+
         queryset = MaterialSpec.objects.select_related(
-            'ambiente', 'aprovador', 'marca', 'ambiente__projeto'
-        )
-        ambiente_id = self.request.query_params.get('ambiente')
-        if ambiente_id:
+            "ambiente", "aprovador", "marca", "projeto"
+        ).order_by("ambiente_id", "item")
+
+        projeto_id = self.request.query_params.get("projeto")
+        ambiente_id = self.request.query_params.get("ambiente")
+
+        # ✅ Novo filtro robusto — cobre tanto MaterialSpec com projeto_id
+        # quanto os que só estão ligados via ambiente__projetos
+        if projeto_id and ambiente_id:
+            queryset = queryset.filter(
+                Q(ambiente_id=ambiente_id) &
+                (
+                    Q(projeto_id=projeto_id)
+                    | Q(ambiente__projetos__id=projeto_id)
+                    | Q(projeto__isnull=True)  # ✅ inclui materiais base
+                )
+            ).distinct()
+        elif projeto_id:
+            queryset = queryset.filter(
+                Q(projeto_id=projeto_id)
+                | Q(ambiente__projetos__id=projeto_id)
+                | Q(projeto__isnull=True)  # ✅ também inclui base se ambiente não vier
+            ).distinct()
+        elif ambiente_id:
             queryset = queryset.filter(ambiente_id=ambiente_id)
+
         return queryset
 
     def get_permissions(self):
@@ -260,10 +338,12 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
 
         # cria log
+        projeto = m.ambiente.projetos.first()
+
         Log.objects.create(
             usuario=request.user,
             acao='APROVACAO',
-            projeto=m.ambiente.projeto,
+            projeto=projeto,
             motivo=f'Item {m.get_item_display()} aprovado'
         )
 
@@ -274,6 +354,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     def reprovar(self, request, pk=None):
         m = self.get_object()
         motivo = request.data.get('motivo', '')
+
         m.status = 'REPROVADO'
         m.aprovador = request.user
         m.data_aprovacao = timezone.now()
@@ -283,7 +364,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         Log.objects.create(
             usuario=request.user,
             acao='REPROVACAO',
-            projeto=m.ambiente.projeto,
+            projeto=m.projeto,  # AGORA VEM DIRETO DO MATERIAL
             motivo=f'Item {m.get_item_display()} reprovado: {motivo}'
         )
 
@@ -292,21 +373,27 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     # Reverter para pendente
     @action(detail=True, methods=['post'])
     def reverter(self, request, pk=None):
-        m = self.get_object()
-        m.status = 'PENDENTE'
-        m.aprovador = None
-        m.data_aprovacao = None
-        m.motivo = ''
-        m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+        projeto = self.get_object()
+        projeto.status = "PENDENTE"
+        projeto.save(update_fields=["status", "data_atualizacao"])
+
+        # reverte todos os materiais do projeto
+        from .models import MaterialSpec
+        MaterialSpec.objects.filter(ambiente__projetos=projeto).update(
+            status="PENDENTE",
+            aprovador=None,
+            data_aprovacao=None,
+            motivo=""
+        )
 
         Log.objects.create(
             usuario=request.user,
-            acao='EDICAO',
-            projeto=m.ambiente.projeto,
-            motivo=f'Item {m.get_item_display()} revertido para pendente'
+            acao="EDICAO",
+            projeto=projeto,
+            motivo="Projeto revertido para pendente com todos os itens."
         )
 
-        return Response({'status': m.status}, status=status.HTTP_200_OK)
+        return Response({"status": projeto.status}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

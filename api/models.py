@@ -6,6 +6,7 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.db.models.signals import m2m_changed
 
 #Modelo de Usuário 
 class Usuario(AbstractUser):
@@ -25,36 +26,6 @@ class Usuario(AbstractUser):
 
 # modelo de Projeto / documento de criação / entidade central
 
-class Projeto(models.Model):
-    STATUS_CHOICES = [
-        ('PENDENTE', 'Pendente'),
-        ('APROVADO', 'Aprovado'),
-        ('REPROVADO', 'Reprovado'),
-    ]
-    default="PENDENTE",
-    
-    TIPO_PROJETO_CHOICES = [
-        ('RESIDENCIAL', 'Residencial'),
-        ('COMERCIAL', 'Comercial'),
-    ]
-
-    nome_do_projeto = models.CharField(max_length=255)
-    tipo_do_projeto = models.CharField(max_length=50, choices=TIPO_PROJETO_CHOICES)
-    data_entrega = models.DateField()
-    descricao = models.TextField(blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
-    responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='projetos_criados')
-    
-    observacoes_gerais = models.TextField(blank=True, null=True)
-    data_criacao = models.DateTimeField(auto_now_add=True)
-    data_atualizacao = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Projeto"
-        verbose_name_plural = "Projetos"
-
-    def __str__(self):
-        return self.nome_do_projeto
 
 class Ambiente(models.Model):
     CATEGORIA_CHOICES = [
@@ -62,9 +33,9 @@ class Ambiente(models.Model):
         ('COMUM', 'Área Comum'),
         ('EXTERNA', 'Área Externa'),
     ]
-    projeto = models.ForeignKey(Projeto, on_delete=models.CASCADE, related_name='ambientes')
+
+    nome_do_ambiente = models.CharField(max_length=100)  # único por nome
     categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='PRIVATIVA')
-    nome_do_ambiente = models.CharField(max_length=100)
     guia_de_cores = models.CharField(max_length=255, blank=True)
 
     piso = models.TextField(blank=True)
@@ -80,12 +51,48 @@ class Ambiente(models.Model):
     inst_eletrica = models.TextField(blank=True, verbose_name="Instalação Elétrica")
     inst_comunicacao = models.TextField(blank=True, verbose_name="Instalação de Comunicação")
 
+    tipo = models.ForeignKey("TipoAmbiente", on_delete=models.SET_NULL, null=True, blank=True, related_name='ambientes')
+
     class Meta:
         verbose_name = "Ambiente"
         verbose_name_plural = "Ambientes"
+        ordering = ["nome_do_ambiente"]
 
     def __str__(self):
-        return f"{self.nome_do_ambiente} - {self.projeto.nome_do_projeto}"
+        return self.nome_do_ambiente
+
+class Projeto(models.Model):
+    STATUS_CHOICES = [
+        ('PENDENTE', 'Pendente'),
+        ('APROVADO', 'Aprovado'),
+        ('REPROVADO', 'Reprovado'),
+    ]
+    TIPO_PROJETO_CHOICES = [
+        ('RESIDENCIAL', 'Residencial'),
+        ('COMERCIAL', 'Comercial'),
+        ('INDUSTRIAL', 'Industrial'),
+    ]
+
+    nome_do_projeto = models.CharField(max_length=255, unique = True)
+    tipo_do_projeto = models.CharField(max_length=50, choices=TIPO_PROJETO_CHOICES)
+    data_entrega = models.DateField()
+    descricao = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
+    responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='projetos_criados')
+    
+    observacoes_gerais = models.TextField(blank=True, null=True)
+    data_criacao = models.DateTimeField(auto_now_add=True)
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    # 🔥 agora cada projeto pode ter vários ambientes genéricos
+    ambientes = models.ManyToManyField(Ambiente, related_name="projetos", blank=True)
+
+    class Meta:
+        verbose_name = "Projeto"
+        verbose_name_plural = "Projetos"
+
+    def __str__(self):
+        return self.nome_do_projeto
 
 class Log(models.Model):
     ACAO_CHOICES = [
@@ -100,8 +107,7 @@ class Log(models.Model):
     
     acao = models.CharField(max_length=20, choices=ACAO_CHOICES)
     
-    projeto = models.ForeignKey(Projeto, on_delete=models.SET_NULL, null=True, blank=True)
-    
+    projeto = models.ForeignKey('Projeto', on_delete=models.SET_NULL, null=True, blank=True, related_name='logs')  # ✅ recolocado
     motivo = models.TextField(blank=True, null=True) 
     data_hora = models.DateTimeField(auto_now_add=True)
 
@@ -145,16 +151,10 @@ class Marca(models.Model):
         return self.nome
 
 
-# vínculo opcional do Ambiente com um TipoAmbiente
-# (se quiser poderá preencher depois sem quebrar nada)
-Ambiente.add_to_class('tipo', models.ForeignKey(
-    TipoAmbiente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ambientes'
-))
-
 class DescricaoMarca(models.Model):
     material = models.CharField(max_length=100)
     marcas = models.TextField()
-    projeto = models.ForeignKey(Projeto, on_delete=models.CASCADE, related_name='descricao_marcas')
+    projeto = models.ForeignKey(Projeto, on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         verbose_name = "Descrição de Marca"
@@ -184,10 +184,10 @@ class MaterialSpec(models.Model):
         ('INST_COMUNICACAO', 'Inst. Comunicação'),
     )
 
+    projeto = models.ForeignKey('Projeto', on_delete=models.CASCADE, related_name='materiais', null=True, blank = True)
     ambiente = models.ForeignKey('Ambiente', on_delete=models.CASCADE, related_name='materials')
     item = models.CharField(max_length=30, choices=ITENS)
     descricao = models.TextField(blank=True)
-    # catálogo (opcional)
     marca = models.ForeignKey(Marca, null=True, blank=True, on_delete=models.SET_NULL, related_name='materiais')
 
     status = models.CharField(max_length=10, choices=STATUS, default='PENDENTE')
@@ -198,7 +198,7 @@ class MaterialSpec(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('ambiente', 'item')  # um item de cada tipo por ambiente
+        unique_together = ('projeto', 'ambiente', 'item')  # um item de cada tipo por ambiente
         ordering = ['ambiente_id', 'item']
         verbose_name = 'Material do Ambiente'
         verbose_name_plural = 'Materiais do Ambiente'
@@ -209,35 +209,22 @@ class MaterialSpec(models.Model):
     def criar_descricao_marca_automatica(sender, instance, created, **kwargs):
         if not instance.descricao:
             return
-
         desc = instance.descricao.lower()
 
-        # Dicionário oficial de mapeamento Material → Marcas
-        padroes = {
-            "cerâmica": ("Cerâmica", "Incesa, Portobello, Arielle, Tecnogres, Pamesa, Camelo Fior, Biancogrês, Pointer."),
-            "porcelanato": ("Porcelanato", "Portobello, Arielle, Tecnogres, Pamesa, Biancogrês, Elizabeth, Ceusa, Pointer, Villagres."),
-            "laminado": ("Laminado", "Eucatex, Durafloor ou Espaçofloor."),
-            "esquadria": ("Esquadria", "Esaf, Alumasa, Atlantica, Ramassol ou Unicasa."),
-            "ferragem": ("Ferragem", "Silvana, Stam, Arouca, Soprano, Aliança, Imab."),
-            "elétrica": ("Inst. Elétrica", "Alumbra, Steck, Ilumi, Schneider, Margirius ou Fame."),
-            "metal": ("Metal Sanitário", "Forusi, Deca, Celite, Fabrimar ou Docol."),
-            "louça": ("Louças", "Celite, Deca, Incepa."),
-            "porta(alumínio)": ( "Esaf, Mgm, Alumasa, Atlantica, Ramassol ou Unicasa."),
-            "cuba(inox)": ("Ghel Plus, Frank, Tramontina ou Pianox, Tecnocuba."),
-            "cuba(louça)": ("Celite, Deca, Incepa."),
-        }
-
-        for chave, (material_nome, marcas_padrao) in padroes.items():
-            if chave in desc:
-                projeto = instance.ambiente.projeto
-                from .models import DescricaoMarca
-
-                if not DescricaoMarca.objects.filter(
-                    projeto=projeto, material__iexact=material_nome
-                ).exists():
-                    DescricaoMarca.objects.create(
-                        projeto=projeto,
-                        material=material_nome,
-                        marcas=marcas_padrao
-                    )
-                break
+# @receiver(m2m_changed, sender=Projeto.ambientes.through)
+# def criar_materiais_quando_adicionar_ambiente(sender, instance, action, pk_set, **kwargs):
+#     """
+#     Sempre que ambientes são adicionados a um projeto,
+#     cria automaticamente os materiais padrão (piso, parede, teto etc).
+#     """
+#     if action == "post_add" and pk_set:
+#         from .models import MaterialSpec
+#         for ambiente_id in pk_set:
+#             ambiente = Ambiente.objects.get(pk=ambiente_id)
+#             for item, _ in MaterialSpec.ITENS:
+#                 MaterialSpec.objects.get_or_create(
+#                     projeto=instance,
+#                     ambiente=ambiente,
+#                     item=item,
+#                     defaults={"descricao": ""}
+#                 )

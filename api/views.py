@@ -147,15 +147,10 @@ class DescricaoMarcaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = DescricaoMarca.objects.all()
-
-        projeto_id = self.request.query_params.get("projeto")
+        #se quiser, permite filtro por material
         material = self.request.query_params.get("material")
-
-        if projeto_id:
-            qs = qs.filter(projeto_id=projeto_id)
         if material:
             qs = qs.filter(material__iexact=material)
-
         return qs
 
     def get_permissions(self):

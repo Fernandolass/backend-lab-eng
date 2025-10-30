@@ -90,7 +90,7 @@ class ProjetoViewSet(viewsets.ModelViewSet):
 
         from .models import MaterialSpec, Ambiente
 
-        # 🔹 cria materiais base para cada ambiente selecionado
+        # cria materiais base para cada ambiente selecionado
         for ambiente in projeto.ambientes.all():
             ambiente_base = (
                 Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
@@ -143,26 +143,20 @@ class TipoAmbienteViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 class DescricaoMarcaViewSet(viewsets.ModelViewSet):
-    queryset = DescricaoMarca.objects.all()
     serializer_class = DescricaoMarcaSerializer
 
     def get_queryset(self):
-        queryset = MaterialSpec.objects.select_related(
-            "ambiente", "aprovador", "marca", "projeto"
-        ).order_by("ambiente_id", "item")
+        qs = DescricaoMarca.objects.all()
 
         projeto_id = self.request.query_params.get("projeto")
-        ambiente_id = self.request.query_params.get("ambiente")
+        material = self.request.query_params.get("material")
 
-        # 🔹 Se vier ambos, filtra pelos dois
-        if projeto_id and ambiente_id:
-            queryset = queryset.filter(projeto_id=projeto_id, ambiente_id=ambiente_id)
-        elif projeto_id:
-            queryset = queryset.filter(projeto_id=projeto_id)
-        elif ambiente_id:
-            queryset = queryset.filter(ambiente_id=ambiente_id)
+        if projeto_id:
+            qs = qs.filter(projeto_id=projeto_id)
+        if material:
+            qs = qs.filter(material__iexact=material)
 
-        return queryset
+        return qs
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:

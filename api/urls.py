@@ -16,7 +16,7 @@ router.register(r'tipos-ambiente', views.TipoAmbienteViewSet, basename='tipos-am
 router.register(r'marcas', views.MarcaViewSet, basename='marcas')
 router.register(r'marcas-descricao', views.DescricaoMarcaViewSet, basename='marcas-descricao')
 
-# 🟦 grupo de rotas /stats/
+# grupo de rotas /stats/
 stats_patterns = [
     path('dashboard/', views.dashboard_stats, name='dashboard-stats'),
     path('mensais/', views.stats_mensais, name='stats-mensais'),
@@ -24,6 +24,6 @@ stats_patterns = [
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('stats/', include(stats_patterns)),  # 👈 agrupamento limpo
+    path('stats/', include(stats_patterns)),  # agrupamento limpo
     path("api/token/", TokenObtainPairView.as_view(serializer_class=CustomTokenObtainPairSerializer), name="token_obtain_pair"),
 ]

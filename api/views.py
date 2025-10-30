@@ -45,7 +45,7 @@ class ProjetoViewSet(viewsets.ModelViewSet):
     serializer_class = ProjetoSerializer
 
     def get_serializer_class(self):
-        # 👉 Quando for listagem, usa o serializer mais leve
+        # quando for listagem, usa o serializer mais leve
         if self.action == "list":
             return ProjetoListSerializer
         return ProjetoSerializer
@@ -282,7 +282,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
         projeto_id = self.request.query_params.get("projeto")
         ambiente_id = self.request.query_params.get("ambiente")
 
-        # ✅ Novo filtro robusto — cobre tanto MaterialSpec com projeto_id
+        # Novo filtro cobre tanto MaterialSpec com projeto_id
         # quanto os que só estão ligados via ambiente__projetos
         if projeto_id and ambiente_id:
             queryset = queryset.filter(
@@ -290,14 +290,14 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
                 (
                     Q(projeto_id=projeto_id)
                     | Q(ambiente__projetos__id=projeto_id)
-                    | Q(projeto__isnull=True)  # ✅ inclui materiais base
+                    | Q(projeto__isnull=True)  # inclui materiais base
                 )
             ).distinct()
         elif projeto_id:
             queryset = queryset.filter(
                 Q(projeto_id=projeto_id)
                 | Q(ambiente__projetos__id=projeto_id)
-                | Q(projeto__isnull=True)  # ✅ também inclui base se ambiente não vier
+                | Q(projeto__isnull=True)  # também inclui base se ambiente não vier
             ).distinct()
         elif ambiente_id:
             queryset = queryset.filter(ambiente_id=ambiente_id)

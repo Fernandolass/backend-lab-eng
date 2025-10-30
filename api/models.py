@@ -84,7 +84,7 @@ class Projeto(models.Model):
     data_criacao = models.DateTimeField(auto_now_add=True)
     data_atualizacao = models.DateTimeField(auto_now=True)
 
-    # 🔥 agora cada projeto pode ter vários ambientes genéricos
+    # agora cada projeto pode ter vários ambientes genéricos
     ambientes = models.ManyToManyField(Ambiente, related_name="projetos", blank=True)
 
     class Meta:
@@ -210,21 +210,3 @@ class MaterialSpec(models.Model):
         if not instance.descricao:
             return
         desc = instance.descricao.lower()
-
-# @receiver(m2m_changed, sender=Projeto.ambientes.through)
-# def criar_materiais_quando_adicionar_ambiente(sender, instance, action, pk_set, **kwargs):
-#     """
-#     Sempre que ambientes são adicionados a um projeto,
-#     cria automaticamente os materiais padrão (piso, parede, teto etc).
-#     """
-#     if action == "post_add" and pk_set:
-#         from .models import MaterialSpec
-#         for ambiente_id in pk_set:
-#             ambiente = Ambiente.objects.get(pk=ambiente_id)
-#             for item, _ in MaterialSpec.ITENS:
-#                 MaterialSpec.objects.get_or_create(
-#                     projeto=instance,
-#                     ambiente=ambiente,
-#                     item=item,
-#                     defaults={"descricao": ""}
-#                 )

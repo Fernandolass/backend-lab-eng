@@ -31,7 +31,7 @@ __pycache__/
 *.so
 *.sqlite3
 .env
-*/management
+*/management/
 # Arquivos e diretórios gerados em runtime
 media/
 staticfiles/

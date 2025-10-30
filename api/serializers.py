@@ -76,7 +76,7 @@ class AmbienteSerializer(serializers.ModelSerializer):
         return MaterialSpecSerializer(qs, many=True).data
 
 
-# 🔹 Serializer enxuto para lista de projetos (list view)
+# Serializer enxuto para lista de projetos (list view)
 class ProjetoListSerializer(serializers.ModelSerializer):
     responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
 

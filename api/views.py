@@ -1,16 +1,16 @@
-from django.db import models  # para Q nas consultas
+from django.db import models
 from rest_framework import viewsets, permissions, status
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from django.utils import timezone
-from django.db.models.functions import TruncMonth  
-from django.db.models import Count 
+from django.db.models.functions import TruncMonth
+from django.db.models import Count, Prefetch
 
 from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from .serializers import (
-    UsuarioSerializer, ProjetoSerializer, AmbienteSerializer,
+    UsuarioSerializer, ProjetoSerializer, ProjetoListSerializer, AmbienteSerializer,
     LogSerializer, ModeloDocumentoSerializer, MyTokenObtainPairSerializer,
     MaterialSpecSerializer, TipoAmbienteSerializer, MarcaSerializer, DescricaoMarcaSerializer
 )
@@ -42,76 +42,69 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
 
 # ---------------- PROJETOS ----------------
 class ProjetoViewSet(viewsets.ModelViewSet):
-    queryset = Projeto.objects.all().order_by('-data_criacao')
     serializer_class = ProjetoSerializer
+
+    def get_serializer_class(self):
+        # 👉 Quando for listagem, usa o serializer mais leve
+        if self.action == "list":
+            return ProjetoListSerializer
+        return ProjetoSerializer
+
+    def get_queryset(self):
+        qs = (Projeto.objects
+              .all()
+              .select_related("responsavel")  # evita query extra para usuário
+              .prefetch_related(
+                  "ambientes",
+                  Prefetch(
+                      "materiais",
+                      queryset=(MaterialSpec.objects
+                                .select_related("ambiente", "marca", "aprovador")
+                                .order_by("ambiente_id", "item"))
+                  )
+              )
+              .order_by("-data_criacao"))
+
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status__iexact=status_param)
+
+        return qs
 
     def get_permissions(self):
         if self.action in ["list", "retrieve"]:
             return [permissions.IsAuthenticated()]
         if self.action == "create":
-            # atendente pode criar; gerente/superadmin também
             return [AllowCreateForBasicButNoEdit()]
         if self.action in ["update", "partial_update"]:
-            # editar/aprovar/reprovar via PATCH: apenas gerente+ 
             return [AllowWriteForManagerUp()]
         if self.action in ["aprovar", "reprovar"]:
-            # actions custom: apenas gerente/superadmin
             return [AllowWriteForManagerUp()]
         if self.action == "destroy":
-            # deletar: só superadmin
             return [OnlySuperadminDelete()]
         return [permissions.IsAuthenticated()]
 
-    def get_queryset(self):
-        qs = Projeto.objects.all().order_by('-data_criacao')
-        status_param = self.request.query_params.get('status')
-        if status_param:
-            qs = qs.filter(status__iexact=status_param)
-
-        u = self.request.user
-        if not u.is_authenticated:
-            return qs.none()
-
-        cargo = (getattr(u, "cargo", "") or "").lower()
-        if cargo == "cliente":
-            cargo = "atendente"
-
-        # gerente e superadmin veem tudo; atendente também só leitura 
-        return qs
     def perform_create(self, serializer):
         projeto = serializer.save(responsavel=self.request.user)
         Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
 
         from .models import MaterialSpec, Ambiente
 
-        print(f"🚀 Criando materiais para o projeto: {projeto.nome_do_projeto}")
-
-        # 🔹 para cada ambiente selecionado no projeto
+        # 🔹 cria materiais base para cada ambiente selecionado
         for ambiente in projeto.ambientes.all():
-            print(f"   → Ambiente vinculado: {ambiente.nome_do_ambiente}")
-
-            # 🔍 busca o ambiente base global (sem projeto vinculado)
             ambiente_base = (
                 Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
                 .order_by("id")
                 .first()
             )
-
             if not ambiente_base:
-                print(f"⚠️ Nenhum ambiente base encontrado para {ambiente.nome_do_ambiente}")
                 continue
-
-            # 🔹 busca materiais base do ambiente global
             materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente=ambiente_base)
-
-            # 🔹 cria materiais no projeto atual, evitando duplicados
             for base in materiais_base:
-                # evita recriação do mesmo item no mesmo projeto + ambiente
                 if MaterialSpec.objects.filter(
                     projeto=projeto, ambiente=ambiente, item__iexact=base.item.strip()
                 ).exists():
                     continue
-
                 MaterialSpec.objects.create(
                     projeto=projeto,
                     ambiente=ambiente,
@@ -120,7 +113,6 @@ class ProjetoViewSet(viewsets.ModelViewSet):
                     status="PENDENTE",
                 )
 
-        print(f"✅ Materiais criados com sucesso para {projeto.nome_do_projeto}")
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
         projeto = self.get_object()

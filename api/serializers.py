@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import serializers
 from django.contrib.auth import authenticate
 
 
@@ -19,13 +18,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         return data
 
-# modelo de Usuário
+
 class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        # inputs que aparecem na api
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'cargo']
-        
+
+
 class TipoAmbienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = TipoAmbiente
@@ -37,18 +36,20 @@ class MarcaSerializer(serializers.ModelSerializer):
         model = Marca
         fields = ['id', 'nome', 'created_at']
 
+
 class DescricaoMarcaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DescricaoMarca
         fields = ['id', 'material', 'marcas', 'projeto']
 
-# modelo de Ambiente
+
 class MaterialSpecSerializer(serializers.ModelSerializer):
     aprovador_email = serializers.EmailField(source='aprovador.email', read_only=True)
     item_label = serializers.CharField(source='get_item_display', read_only=True)
     marca_nome = serializers.CharField(source='marca.nome', read_only=True)
     ambiente_nome = serializers.CharField(source='ambiente.nome_do_ambiente', read_only=True)
     ambiente_categoria = serializers.CharField(source='ambiente.categoria', read_only=True)
+
     class Meta:
         model = MaterialSpec
         fields = ['id', 'ambiente', 'item', 'item_label', 'descricao',
@@ -56,6 +57,7 @@ class MaterialSpecSerializer(serializers.ModelSerializer):
                   'status', 'motivo', 'aprovador', 'aprovador_email',
                   'data_aprovacao', 'updated_at']
         read_only_fields = ['aprovador', 'aprovador_email', 'data_aprovacao', 'updated_at']
+
 
 class AmbienteSerializer(serializers.ModelSerializer):
     materials = serializers.SerializerMethodField()
@@ -65,17 +67,35 @@ class AmbienteSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_materials(self, obj):
-        projeto = self.context.get("projeto") or self.context.get("view").kwargs.get("pk")
-        from .models import MaterialSpec
+        projeto = self.context.get("projeto")
         if not projeto:
             return []
-        materiais = MaterialSpec.objects.filter(projeto_id=projeto, ambiente=obj)
-        return MaterialSpecSerializer(materiais, many=True).data
+        qs = MaterialSpec.objects.filter(projeto_id=projeto, ambiente=obj) \
+                                 .select_related("marca", "aprovador", "ambiente") \
+                                 .order_by("ambiente_id", "item")
+        return MaterialSpecSerializer(qs, many=True).data
 
-#  modelo de Projeto 
+
+# 🔹 Serializer enxuto para lista de projetos (list view)
+class ProjetoListSerializer(serializers.ModelSerializer):
+    responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
+
+    class Meta:
+        model = Projeto
+        fields = [
+            'id',
+            'nome_do_projeto',
+            'tipo_do_projeto',
+            'status',
+            'responsavel_nome',
+            'data_criacao',
+            'data_atualizacao',
+        ]
+
+
 class ProjetoSerializer(serializers.ModelSerializer):
     responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
-    ambientes = AmbienteSerializer(many=True, read_only=True)
+    ambientes = serializers.SerializerMethodField()
     ambientes_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Ambiente.objects.all(), write_only=True, source="ambientes"
     )
@@ -84,60 +104,50 @@ class ProjetoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Projeto
         fields = [
-            'id',
-            'nome_do_projeto',
-            'tipo_do_projeto',
-            'data_entrega',
-            'descricao',
-            'status',
-            'responsavel',
-            'responsavel_nome',
-            'data_criacao',
-            'data_atualizacao',
-            'ambientes',        # leitura detalhada
-            'ambientes_ids', 
-            'descricao_marcas',   # escrita com lista de IDs
+            'id', 'nome_do_projeto', 'tipo_do_projeto', 'data_entrega', 'descricao',
+            'status', 'responsavel', 'responsavel_nome', 'data_criacao',
+            'data_atualizacao', 'ambientes', 'ambientes_ids', 'descricao_marcas',
         ]
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        # 🔹 Filtra materiais de cada ambiente por este projeto
-        ambientes_data = []
-        for ambiente in instance.ambientes.all():
-            s = AmbienteSerializer(ambiente, context={"projeto": instance.id})
-            ambientes_data.append(s.data)
-        rep["ambientes"] = ambientes_data
-        return rep
+
+    def get_ambientes(self, instance):
+        # usa dados já "prefetched"
+        materiais_by_amb = {}
+        for m in instance.materiais.all():
+            materiais_by_amb.setdefault(m.ambiente_id, []).append(m)
+
+        data = []
+        for amb in instance.ambientes.all():
+            amb_data = AmbienteSerializer(amb).data
+            amb_data['materials'] = MaterialSpecSerializer(
+                materiais_by_amb.get(amb.id, []), many=True
+            ).data
+            data.append(amb_data)
+        return data
+
     def validate_nome_do_projeto(self, value):
         if Projeto.objects.filter(nome_do_projeto=value).exists():
             raise serializers.ValidationError("Já existe um projeto com esse nome.")
         return value
+
     def create(self, validated_data):
         validated_data["responsavel"] = self.context["request"].user
         return super().create(validated_data)
 
-# Serializer para o modelo de Log
+
 class LogSerializer(serializers.ModelSerializer):
-    #email do usuário em vez do ID
     usuario_email = serializers.EmailField(source='usuario.email', read_only=True)
-    #nome do projeto em vez do ID
     projeto_nome = serializers.CharField(source='projeto.nome_do_projeto', read_only=True)
 
     class Meta:
         model = Log
-        fields = [
-            'id',
-            'usuario_email',
-            'acao',
-            'projeto_nome',
-            'motivo',
-            'data_hora'
-        ]
+        fields = ['id', 'usuario_email', 'acao', 'projeto_nome', 'motivo', 'data_hora']
 
-# Serializer ModeloDocumento
+
 class ModeloDocumentoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModeloDocumento
         fields = '__all__'
+
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod

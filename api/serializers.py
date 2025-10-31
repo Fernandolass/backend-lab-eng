@@ -40,7 +40,7 @@ class MarcaSerializer(serializers.ModelSerializer):
 class DescricaoMarcaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DescricaoMarca
-        fields = ['id', 'material', 'marcas', 'projeto']
+        fields = ['id', 'material', 'marcas']
 
 
 class MaterialSpecSerializer(serializers.ModelSerializer):
@@ -99,7 +99,8 @@ class ProjetoSerializer(serializers.ModelSerializer):
     ambientes_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Ambiente.objects.all(), write_only=True, source="ambientes"
     )
-    descricao_marcas = DescricaoMarcaSerializer(many=True, read_only=True, source="descricaomarca_set")
+    # Campo agora usa SerializerMethodField
+    descricao_marcas = serializers.SerializerMethodField()
 
     class Meta:
         model = Projeto
@@ -109,18 +110,21 @@ class ProjetoSerializer(serializers.ModelSerializer):
             'data_atualizacao', 'ambientes', 'ambientes_ids', 'descricao_marcas',
         ]
 
-    def get_ambientes(self, instance):
-        # usa dados já "prefetched"
-        materiais_by_amb = {}
-        for m in instance.materiais.all():
-            materiais_by_amb.setdefault(m.ambiente_id, []).append(m)
+    # Retornar marcas globais
+    def get_descricao_marcas(self, obj):
+        marcas = DescricaoMarca.objects.all()
+        return DescricaoMarcaSerializer(marcas, many=True).data
 
+    def get_ambientes(self, instance):
         data = []
         for amb in instance.ambientes.all():
             amb_data = AmbienteSerializer(amb).data
-            amb_data['materials'] = MaterialSpecSerializer(
-                materiais_by_amb.get(amb.id, []), many=True
-            ).data
+            # Buscar SOMENTE materiais desse projeto + ambiente
+            materiais = MaterialSpec.objects.filter(
+                projeto=instance,
+                ambiente=amb
+            ).select_related("marca", "aprovador")
+            amb_data['materials'] = MaterialSpecSerializer(materiais, many=True).data
             data.append(amb_data)
         return data
 

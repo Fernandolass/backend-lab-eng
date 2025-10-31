@@ -1,10 +1,9 @@
-from pathlib import Path
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
-import pymysql
-pymysql.install_as_MySQLdb()
-# Carrega o .env
+
+# Carregar .env
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,10 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ==============================
 # DJANGO CORE
 # ==============================
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-insegura")
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-insegura")  # Segurança
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]  # Seguro para ambiente local
 
 # ==============================
 # APPS
@@ -28,11 +26,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # terceiros
+    # Terceiros
     "rest_framework",
     "corsheaders",
 
-    # locais
+    # Seus Apps
     "api",
 ]
 
@@ -72,36 +70,44 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ==============================
-# BANCO DE DADOS (MySQL Railway)
-# ==============================
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("MYSQLDATABASE", "railway"),
-        "USER": os.getenv("MYSQLUSER", "root"),
-        "PASSWORD": os.getenv("MYSQLPASSWORD", ""),
-        "HOST": os.getenv("MYSQLHOST", "127.0.0.1"),
-        "PORT": os.getenv("MYSQLPORT", "3306"),
-        "OPTIONS": {"charset": "utf8mb4"},
+# ======================================================
+# BANCO DE DADOS – AUTOMÁTICO (SQLite para teste / MySQL para produção)
+# ======================================================
+USE_SQLITE = os.getenv("USE_SQLITE", "True").lower() == "true"
+
+if USE_SQLITE:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.getenv("MYSQLDATABASE", ""),
+            "USER": os.getenv("MYSQLUSER", ""),
+            "PASSWORD": os.getenv("MYSQLPASSWORD", ""),
+            "HOST": os.getenv("MYSQLHOST", ""),
+            "PORT": os.getenv("MYSQLPORT", "3306"),
+        }
+    }
 
 # ==============================
-# CONFIG PADRÕES
+# CONFIGURAÇÕES GERAIS
 # ==============================
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ==============================
-# REST FRAMEWORK / JWT
+# REST & JWT
 # ==============================
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -110,26 +116,21 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 10,  # número de projetos por página
+    "PAGE_SIZE": 10,
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=3),  # token dura 3 horas
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # refresh dura 1 dia
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "ALGORITHM": "HS256",
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=3),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # ==============================
-# CORS (para React local)
+# CORS (para frontend local)
 # ==============================
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://frontend-jn.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True

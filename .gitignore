@@ -24,14 +24,14 @@ yarn-error.log*
 # BACKEND (Django)
 # =========================
 venv/
-*.pyc
 __pycache__/
+*.pyc
+*.pyo
 *.pyo
 *.pyd
 *.so
-*.sqlite3
 .env
-*/management/
+api/management/
 # Arquivos e diretórios gerados em runtime
 media/
 staticfiles/

@@ -1,47 +1,48 @@
-# Como Rodar o Backend
-
-## Passos
-
-### 1. Clone o repositório:
-```
+Como Rodar o Backend 
+1. Clone o repositório
 git clone https://github.com/Fernandolass/backend-lab-eng.git
 cd backend-lab-eng
-```
 
-### 2. Crie e ative um ambiente virtual:
-
- ```
+2. Crie e ative o ambiente virtual
 python -m venv venv
-source venv/bin/activate    # Linux/Mac
 venv\Scripts\activate       # Windows
- ```
-#### Caso dê erro tipo 
-```
-O arquivo  não pode ser carregado porque a execução de scripts foi desabilitada neste sistema. 
-```
-#### Utilize este comando: 
-```
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass   
-```
+source venv/bin/activate    # Linux / Mac
 
-### 3. Instale as dependências:
-```
+
+Se aparecer erro de script no PowerShell (Windows):
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+3. Instale as dependências
 pip install -r requirements.txt
-```
 
-### 4. Configure variáveis de ambiente criando um arquivo .env:
-```
+4. Configure o arquivo .env
+
+Crie um arquivo chamado .env na raiz do projeto e copie o conteúdo do arquivo .env.example, por exemplo:
+
 DEBUG=True
-SECRET_KEY=m@5#f$_c+69y=_w3@g45w658sdttig!#m12gh@6m=bzyg!2-
+SECRET_KEY=sua-secret-key-aqui
+USE_SQLITE=True
 
-MYSQLHOST=interchange.proxy.rlwy.net
-MYSQLPORT=15925
-MYSQLUSER=root
-MYSQLPASSWORD=DsiYJlmgkaUPVYguxlVAILfvUBJXhUhL
-MYSQLDATABASE=railway
-```
 
-### 5. Inicie o servidor de desenvolvimento:
-```
+Não coloque senhas reais ou dados da empresa.
+
+5. (Opcional) Popular banco com dados fictícios
+python manage.py migrate
+python manage.py popular_fake_data
+
+
+Isso criará usuários de teste:
+
+Usuário	Email	Senha	Cargo
+Admin	admin@teste.com admin123
+Gerente	gerente@teste.com gerente123	gerente
+Atendente	atendente@teste.com atendente123	atendente
+
+6. Inicie o servidor
 python manage.py runserver
-```
+        usuarios = [
+            {"email": "admin@teste.com", "username": "admin", "password": "admin123", "cargo": "superadmin", "is_superuser": True, "is_staff": True},
+            {"email": "gerente@teste.com", "username": "gerente", "password": "gerente123", "cargo": "gerente", "is_superuser": False, "is_staff": True},
+            {"email": "atendente@teste.com", "username": "atendente", "password": "atendente123", "cargo": "atendente", "is_superuser": False, "is_staff": False},
+        ]

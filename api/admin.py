@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca
+from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 
 class CustomUserAdmin(UserAdmin):
     # Mostra os campos personalizados na lista de usuários
@@ -21,3 +21,4 @@ admin.site.register(ModeloDocumento)
 admin.site.register(MaterialSpec)
 admin.site.register(TipoAmbiente)
 admin.site.register(Marca)
+admin.site.register(DescricaoMarca)

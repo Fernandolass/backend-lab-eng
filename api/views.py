@@ -85,40 +85,49 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
-        projeto = serializer.save(responsavel=self.request.user)
-        Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
+        projeto = serializer.save()
+        ambientes = projeto.ambientes.all()
 
-        from .models import MaterialSpec, Ambiente
-
-        # cria materiais base para cada ambiente selecionado
-        for ambiente in projeto.ambientes.all():
-            ambiente_base = (
-                Ambiente.objects.filter(nome_do_ambiente=ambiente.nome_do_ambiente, projetos=None)
-                .order_by("id")
-                .first()
+        for ambiente in ambientes:
+            materiais_base = MaterialSpec.objects.filter(
+                projeto__isnull=True,
+                ambiente=ambiente
             )
-            if not ambiente_base:
-                continue
-            materiais_base = MaterialSpec.objects.filter(projeto__isnull=True, ambiente=ambiente_base)
             for base in materiais_base:
-                if MaterialSpec.objects.filter(
-                    projeto=projeto, ambiente=ambiente, item__iexact=base.item.strip()
-                ).exists():
-                    continue
-                MaterialSpec.objects.create(
+                MaterialSpec.objects.get_or_create(
                     projeto=projeto,
                     ambiente=ambiente,
-                    item=base.item.strip(),
-                    descricao=base.descricao or "",
-                    status="PENDENTE",
+                    item=base.item,
+                    defaults={
+                        'descricao': base.descricao,
+                        'status': 'PENDENTE',
+                        'marca': None
+                    }
                 )
 
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
-        projeto = self.get_object()
+        projeto = self.get_object()  # <- isto é um Projeto
+
+        # (Opcional, mas recomendado): só aprova se não houver pendentes ou reprovados
+        tem_pendentes = MaterialSpec.objects.filter(projeto=projeto, status='PENDENTE').exists()
+        tem_reprovados = MaterialSpec.objects.filter(projeto=projeto, status='REPROVADO').exists()
+        if tem_pendentes or tem_reprovados:
+            return Response(
+                {"detail": "Projeto não pode ser aprovado: há itens pendentes/reprovados."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         projeto.status = "APROVADO"
         projeto.save(update_fields=["status", "data_atualizacao"])
-        Log.objects.create(usuario=request.user, acao="APROVACAO", projeto=projeto)
+
+        Log.objects.create(
+            usuario=request.user,
+            acao="APROVACAO",
+            projeto=projeto,
+            motivo="Projeto aprovado automaticamente (todos os itens aprovados)."
+        )
+
         return Response({"status": projeto.status}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
@@ -262,36 +271,18 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     serializer_class = MaterialSpecSerializer
 
     def get_queryset(self):
-        from django.db.models import Q
-
-        queryset = MaterialSpec.objects.select_related(
-            "ambiente", "aprovador", "marca", "projeto"
-        ).order_by("ambiente_id", "item")
-
         projeto_id = self.request.query_params.get("projeto")
         ambiente_id = self.request.query_params.get("ambiente")
 
-        # Novo filtro cobre tanto MaterialSpec com projeto_id
-        # quanto os que só estão ligados via ambiente__projetos
-        if projeto_id and ambiente_id:
-            queryset = queryset.filter(
-                Q(ambiente_id=ambiente_id) &
-                (
-                    Q(projeto_id=projeto_id)
-                    | Q(ambiente__projetos__id=projeto_id)
-                    | Q(projeto__isnull=True)  # inclui materiais base
-                )
-            ).distinct()
-        elif projeto_id:
-            queryset = queryset.filter(
-                Q(projeto_id=projeto_id)
-                | Q(ambiente__projetos__id=projeto_id)
-                | Q(projeto__isnull=True)  # também inclui base se ambiente não vier
-            ).distinct()
-        elif ambiente_id:
-            queryset = queryset.filter(ambiente_id=ambiente_id)
+        qs = MaterialSpec.objects.select_related("ambiente", "projeto", "marca", "aprovador")
 
-        return queryset
+        if projeto_id:
+            qs = qs.filter(projeto_id=projeto_id)
+
+        if ambiente_id:
+            qs = qs.filter(ambiente_id=ambiente_id)
+
+        return qs  # Nunca devolve globais
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -311,24 +302,21 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     #  Aprovar material individual
     @action(detail=True, methods=['post'])
     def aprovar(self, request, pk=None):
-        m = self.get_object()
-        m.status = 'APROVADO'
-        m.aprovador = request.user
-        m.data_aprovacao = timezone.now()
-        m.motivo = ''
-        m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
+        try:
+            material = MaterialSpec.objects.get(pk=pk, projeto__isnull=False)  # Garante que é do projeto
+        except MaterialSpec.DoesNotExist:
+            return Response(
+                {"detail": "Esse item não é do projeto ou não existe."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # cria log
-        projeto = m.ambiente.projetos.first()
+        material.status = 'APROVADO'
+        material.aprovador = request.user
+        material.data_aprovacao = timezone.now()
+        material.motivo = ""
+        material.save()
 
-        Log.objects.create(
-            usuario=request.user,
-            acao='APROVACAO',
-            projeto=projeto,
-            motivo=f'Item {m.get_item_display()} aprovado'
-        )
-
-        return Response({'status': m.status}, status=status.HTTP_200_OK)
+        return Response({"status": "APROVADO"}, status=status.HTTP_200_OK)
 
     # Reprovar material individual
     @action(detail=True, methods=['post'])

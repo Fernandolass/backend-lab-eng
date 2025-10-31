@@ -41,7 +41,7 @@ MYSQLPASSWORD=DsiYJlmgkaUPVYguxlVAILfvUBJXhUhL
 MYSQLDATABASE=railway
 ```
 
-5. Inicie o servidor de desenvolvimento:
+### 5. Inicie o servidor de desenvolvimento:
 ```
 python manage.py runserver
 ```

@@ -44,7 +44,7 @@ Admin	        admin@teste.com        admin123         admin
 Gerente	        gerente@teste.com      gerente123       gerente
 Atendente	atendente@teste.com    atendente123	atendente
 ```
-6. Inicie o servidor
+## 6. Inicie o servidor
 ```
 python manage.py runserver
         usuarios = [

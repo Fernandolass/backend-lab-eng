@@ -14,8 +14,9 @@ source venv/bin/activate    # Linux / Mac
 
 ### Se aparecer erro de script no PowerShell (Windows):
 
-```Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
+```
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
 ## 3. Instale as dependências
 ```
 pip install -r requirements.txt

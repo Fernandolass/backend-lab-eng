@@ -23,14 +23,13 @@ pip install -r requirements.txt
 ```
 ## 4. Configure o arquivo .env
 
-### Crie um arquivo chamado .env na raiz do projeto e copie o conteúdo do arquivo .env.example, por exemplo:
+Crie um arquivo chamado .env na raiz do projeto e copie o conteúdo do arquivo .env.example, por exemplo:
 ```
 DEBUG=True
 SECRET_KEY=sua-secret-key-aqui
 USE_SQLITE=True
 ```
-
-####Não coloque senhas reais ou dados da empresa.
+Não coloque senhas reais ou dados da empresa.
 
 ## 5. (Opcional) Popular banco com dados fictícios
 ```
@@ -39,12 +38,12 @@ python manage.py popular_fake_data
 ```
 
 ###Isso criará usuários de teste:
-
+```
 Usuário	Email	Senha	Cargo
-Admin	admin@teste.com admin123
+Admin	admin@teste.com admin123     admin
 Gerente	gerente@teste.com gerente123	gerente
 Atendente	atendente@teste.com atendente123	atendente
-
+```
 6. Inicie o servidor
 python manage.py runserver
         usuarios = [

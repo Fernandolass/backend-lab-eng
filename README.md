@@ -1,7 +1,9 @@
-Como Rodar o Backend 
+# Como Rodar o Backend 
 1. Clone o repositório
+```
 git clone https://github.com/Fernandolass/backend-lab-eng.git
 cd backend-lab-eng
+```
 
 2. Crie e ative o ambiente virtual
 python -m venv venv

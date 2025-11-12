@@ -7,6 +7,10 @@ from rest_framework.exceptions import PermissionDenied
 from django.utils import timezone
 from django.db.models.functions import TruncMonth
 from django.db.models import Count, Prefetch
+from django.core.mail import send_mail
+from django.conf import settings
+
+from django.shortcuts import get_object_or_404
 
 from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from .serializers import (
@@ -39,6 +43,20 @@ class UsuarioAdminViewSet(viewsets.ModelViewSet):
             return [OnlySuperadminDelete()]
         return [permissions.IsAuthenticated()]
 
+    @action(detail=True, methods=['post'], url_path='resetar-senha')
+    def resetar_senha(self, request, pk=None):
+        usuario = self.get_object()
+        nova_senha = Usuario.objects.make_random_password()
+        usuario.set_password(nova_senha)
+        usuario.save()
+
+        # envia o e-mail automaticamente usando a função do signals
+        notificar_redefinicao_senha(usuario, nova_senha)
+
+        return Response(    
+            {"detail": f"Senha redefinida e enviada para {usuario.email}."},
+            status=200
+        )
 
 # ---------------- PROJETOS ----------------
 class ProjetoViewSet(viewsets.ModelViewSet):
@@ -85,10 +103,11 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
-        projeto = serializer.save()
-        ambientes = projeto.ambientes.all()
+        projeto = serializer.save(responsavel=self.request.user)
+        Log.objects.create(usuario=self.request.user, acao="CRIACAO", projeto=projeto)
 
-        for ambiente in ambientes:
+        # copiar materiais globais para cada ambiente do projeto
+        for ambiente in projeto.ambientes.all():
             materiais_base = MaterialSpec.objects.filter(
                 projeto__isnull=True,
                 ambiente=ambiente
@@ -107,27 +126,10 @@ class ProjetoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
     def aprovar(self, request, pk=None):
-        projeto = self.get_object()  # <- isto é um Projeto
-
-        # (Opcional, mas recomendado): só aprova se não houver pendentes ou reprovados
-        tem_pendentes = MaterialSpec.objects.filter(projeto=projeto, status='PENDENTE').exists()
-        tem_reprovados = MaterialSpec.objects.filter(projeto=projeto, status='REPROVADO').exists()
-        if tem_pendentes or tem_reprovados:
-            return Response(
-                {"detail": "Projeto não pode ser aprovado: há itens pendentes/reprovados."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+        projeto = self.get_object()
         projeto.status = "APROVADO"
         projeto.save(update_fields=["status", "data_atualizacao"])
-
-        Log.objects.create(
-            usuario=request.user,
-            acao="APROVACAO",
-            projeto=projeto,
-            motivo="Projeto aprovado automaticamente (todos os itens aprovados)."
-        )
-
+        Log.objects.create(usuario=request.user, acao="APROVACAO", projeto=projeto)
         return Response({"status": projeto.status}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], permission_classes=[AllowWriteForManagerUp])
@@ -224,20 +226,58 @@ class LogViewSet(viewsets.ReadOnlyModelViewSet):
         return Log.objects.filter(usuario=u).order_by('-data_hora')
 
 # ---------------- MODELOS DE DOCUMENTO ----------------
-class ModeloDocumentoViewSet(viewsets.ModelViewSet):
-    queryset = ModeloDocumento.objects.all()
-    serializer_class = ModeloDocumentoSerializer
 
-    def get_permissions(self):
-        if self.action in ["list", "retrieve"]:
-            return [permissions.IsAuthenticated()]  # todos logados leem
-        if self.action in ["create", "update", "partial_update"]:
-            # gerente e superadmin podem criar/editar
-            return [AllowWriteForManagerUp()]
-        if self.action == "destroy":
-            # deletar somente superadmin
-            return [OnlySuperadminDelete()]
-        return [permissions.IsAuthenticated()]
+class ModeloDocumentoViewSet(viewsets.ModelViewSet):
+    queryset = ModeloDocumento.objects.all().order_by("-id")
+    serializer_class = ModeloDocumentoSerializer
+    # opcional: aplique a mesma permissão que você usa para alterar/criar
+    # permission_classes = [AllowWriteForManagerUp]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        projeto_id = self.request.query_params.get("projeto")
+        if projeto_id:
+            qs = qs.filter(projeto_id=projeto_id)
+        return qs
+
+    @action(detail=False, methods=["post"], url_path="definir")
+    def definir_modelo(self, request):
+        """
+        Recebe {"projeto_id": 123, "nome": "opc.", "descricao": "opc."}
+        - exige que o projeto esteja APROVADO
+        - cria (ou atualiza) um ModeloDocumento vinculado ao projeto
+        """
+        projeto_id = request.data.get("projeto_id")
+        nome = request.data.get("nome")
+        descricao = request.data.get("descricao", "")
+
+        if not projeto_id:
+            return Response({"detail": "projeto_id é obrigatório."}, status=400)
+
+        projeto = get_object_or_404(Projeto, pk=projeto_id)
+
+        # só permite para projeto APROVADO
+        if projeto.status != "APROVADO":
+            return Response({"detail": "Projeto precisa estar APROVADO."}, status=400)
+
+        # nome padrão = nome do projeto
+        if not nome:
+            nome = projeto.nome_do_projeto
+
+        # Se quiser 1 modelo por projeto, use get_or_create / update_or_create:
+        # obj, created = ModeloDocumento.objects.update_or_create(
+        #     projeto=projeto, defaults={"nome": nome, "descricao": descricao}
+        # )
+
+        # Se pode ter vários modelos por projeto, apenas crie:
+        obj = ModeloDocumento.objects.create(
+            projeto=projeto,
+            nome=nome,
+            descricao=descricao
+        )
+
+        return Response(self.get_serializer(obj).data, status=status.HTTP_201_CREATED)
+
 
 # ---------------- STATS DO DASHBOARD ----------------
 @api_view(['GET'])
@@ -271,18 +311,28 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     serializer_class = MaterialSpecSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
+
+        queryset = MaterialSpec.objects.select_related(
+            "ambiente", "aprovador", "marca", "projeto"
+        ).order_by("ambiente_id", "item")
+
         projeto_id = self.request.query_params.get("projeto")
         ambiente_id = self.request.query_params.get("ambiente")
 
-        qs = MaterialSpec.objects.select_related("ambiente", "projeto", "marca", "aprovador")
+        # Novo filtro cobre tanto MaterialSpec com projeto_id
+        # quanto os que só estão ligados via ambiente__projetos
+        if projeto_id and ambiente_id:
+            queryset = queryset.filter(
+                projeto_id=projeto_id,
+                ambiente_id=ambiente_id
+            )
+        elif projeto_id:
+            queryset = queryset.filter(projeto_id=projeto_id)
+        elif ambiente_id:
+            queryset = queryset.filter(ambiente_id=ambiente_id)
 
-        if projeto_id:
-            qs = qs.filter(projeto_id=projeto_id)
-
-        if ambiente_id:
-            qs = qs.filter(ambiente_id=ambiente_id)
-
-        return qs  # Nunca devolve globais
+        return queryset
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -302,21 +352,24 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
     #  Aprovar material individual
     @action(detail=True, methods=['post'])
     def aprovar(self, request, pk=None):
-        try:
-            material = MaterialSpec.objects.get(pk=pk, projeto__isnull=False)  # Garante que é do projeto
-        except MaterialSpec.DoesNotExist:
-            return Response(
-                {"detail": "Esse item não é do projeto ou não existe."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        m = self.get_object()
+        m.status = 'APROVADO'
+        m.aprovador = request.user
+        m.data_aprovacao = timezone.now()
+        m.motivo = ''
+        m.save(update_fields=['status', 'aprovador', 'data_aprovacao', 'motivo', 'updated_at'])
 
-        material.status = 'APROVADO'
-        material.aprovador = request.user
-        material.data_aprovacao = timezone.now()
-        material.motivo = ""
-        material.save()
+        # cria log
+        projeto = m.ambiente.projetos.first()
 
-        return Response({"status": "APROVADO"}, status=status.HTTP_200_OK)
+        Log.objects.create(
+            usuario=request.user,
+            acao='APROVACAO',
+            projeto=projeto,
+            motivo=f'Item {m.get_item_display()} aprovado'
+        )
+
+        return Response({'status': m.status}, status=status.HTTP_200_OK)
 
     # Reprovar material individual
     @action(detail=True, methods=['post'])

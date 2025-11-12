@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Usuario, Projeto, Ambiente, Log, ModeloDocumento, MaterialSpec, TipoAmbiente, Marca, DescricaoMarca
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
+import unicodedata
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -20,9 +21,33 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = Usuario
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'cargo']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'cargo', 'password']
+        extra_kwargs = {
+            'password': {'write_only': True}
+        }
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        user = Usuario(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_password('123456')
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
 
 
 class TipoAmbienteSerializer(serializers.ModelSerializer):
@@ -93,38 +118,76 @@ class ProjetoListSerializer(serializers.ModelSerializer):
         ]
 
 
+def normalizar_texto(text):
+    """Remove acentos e transforma em minúsculo."""
+    if not text:
+        return ""
+    text = unicodedata.normalize('NFKD', text)
+    return ''.join(c for c in text if not unicodedata.combining(c)).lower()
+
 class ProjetoSerializer(serializers.ModelSerializer):
     responsavel_nome = serializers.CharField(source='responsavel.get_full_name', read_only=True)
     ambientes = serializers.SerializerMethodField()
-    ambientes_ids = serializers.PrimaryKeyRelatedField(
-        many=True, queryset=Ambiente.objects.all(), write_only=True, source="ambientes"
-    )
-    # Campo agora usa SerializerMethodField
-    descricao_marcas = serializers.SerializerMethodField()
+    ambientes_ids = serializers.PrimaryKeyRelatedField(many=True, queryset=Ambiente.objects.all(), write_only=True, source="ambientes")
+    materiais_com_marcas = serializers.SerializerMethodField()  
 
     class Meta:
         model = Projeto
         fields = [
             'id', 'nome_do_projeto', 'tipo_do_projeto', 'data_entrega', 'descricao',
             'status', 'responsavel', 'responsavel_nome', 'data_criacao',
-            'data_atualizacao', 'ambientes', 'ambientes_ids', 'descricao_marcas',
+            'data_atualizacao', 'ambientes', 'ambientes_ids',
+            'materiais_com_marcas', 
         ]
 
-    # Retornar marcas globais
-    def get_descricao_marcas(self, obj):
-        marcas = DescricaoMarca.objects.all()
-        return DescricaoMarcaSerializer(marcas, many=True).data
+    # --------------- NOVA LÓGICA AQUI -----------------
+    def get_materiais_com_marcas(self, projeto):
+        materiais_projeto = MaterialSpec.objects.filter(projeto=projeto)
+        todas_marcas = DescricaoMarca.objects.all()  # globais
+        resultado = []
+        ja_adicionados = set()
+
+        for material in materiais_projeto:
+            # Nome do item, exemplo: "Ferragem", "Parede", "Piso"
+            item_nome = (material.item or "").strip().lower()
+            descricao = (material.descricao or "").strip().lower()
+
+            # Se o nome do item for exatamente igual ao nome do material cadastrado globalmente → adiciona
+            for marca_global in todas_marcas:
+                nome_material = marca_global.material.strip().lower()
+
+                if nome_material == item_nome and nome_material not in ja_adicionados:
+                    ja_adicionados.add(nome_material)
+                    resultado.append({
+                        "material": marca_global.material,
+                        "marcas": marca_global.marcas
+                    })
+
+            #Agora tenta detectar materiais dentro da DESCRIÇÃO (como "cerâmica", "porcelanato")
+            for marca_global in todas_marcas:
+                nome_material = marca_global.material.strip().lower()
+
+                if nome_material in descricao and nome_material not in ja_adicionados:
+                    ja_adicionados.add(nome_material)
+                    resultado.append({
+                        "material": marca_global.material,
+                        "marcas": marca_global.marcas
+                    })
+
+        return resultado
 
     def get_ambientes(self, instance):
+        # usa dados já "prefetched"
+        materiais_by_amb = {}
+        for m in instance.materiais.all():
+            materiais_by_amb.setdefault(m.ambiente_id, []).append(m)
+
         data = []
         for amb in instance.ambientes.all():
             amb_data = AmbienteSerializer(amb).data
-            # Buscar SOMENTE materiais desse projeto + ambiente
-            materiais = MaterialSpec.objects.filter(
-                projeto=instance,
-                ambiente=amb
-            ).select_related("marca", "aprovador")
-            amb_data['materials'] = MaterialSpecSerializer(materiais, many=True).data
+            amb_data['materials'] = MaterialSpecSerializer(
+                materiais_by_amb.get(amb.id, []), many=True
+            ).data
             data.append(amb_data)
         return data
 
@@ -148,9 +211,15 @@ class LogSerializer(serializers.ModelSerializer):
 
 
 class ModeloDocumentoSerializer(serializers.ModelSerializer):
+    projeto_nome = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = ModeloDocumento
-        fields = '__all__'
+        fields = ["id", "nome", "descricao", "projeto", "projeto_nome"]
+
+    def get_projeto_nome(self, obj):
+        return getattr(obj.projeto, "nome_do_projeto", None)
+
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):

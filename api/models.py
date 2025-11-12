@@ -107,7 +107,7 @@ class Log(models.Model):
     
     acao = models.CharField(max_length=20, choices=ACAO_CHOICES)
     
-    projeto = models.ForeignKey('Projeto', on_delete=models.SET_NULL, null=True, blank=True, related_name='logs')  # recolocado
+    projeto = models.ForeignKey('Projeto', on_delete=models.SET_NULL, null=True, blank=True, related_name='logs')  # ✅ recolocado
     motivo = models.TextField(blank=True, null=True) 
     data_hora = models.DateTimeField(auto_now_add=True)
 
@@ -121,6 +121,18 @@ class Log(models.Model):
 class ModeloDocumento(models.Model):
     nome = models.CharField(max_length=100)
     descricao = models.TextField()
+
+    projeto = models.ForeignKey(
+        'Projeto',
+        on_delete=models.CASCADE,
+        related_name='modelos',
+        null=True, blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Modelo de Documento"
+        verbose_name_plural = "Modelos de Documento"
+        
 
     def __str__(self):
         return self.nome
@@ -152,15 +164,16 @@ class Marca(models.Model):
 
 
 class DescricaoMarca(models.Model):
-    material = models.CharField(max_length=100)  # Ex: "Parede", "Piso"
-    marcas = models.TextField()  # Nome das marcas separadas por vírgula
+    material = models.CharField(max_length=100)
+    marcas = models.TextField()
+    
 
     class Meta:
-        verbose_name = "Descrição de Marca Global"
-        verbose_name_plural = "Descrição das Marcas Globais"
+        verbose_name = "Descrição de Marca"
+        verbose_name_plural = "Descrição das Marcas"
 
     def __str__(self):
-        return f"{self.material}: {self.marcas}"
+        return f"{self.material}: {self.marcas[:40]}..."
 
 class MaterialSpec(models.Model):
     STATUS = (

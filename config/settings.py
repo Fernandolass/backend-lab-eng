@@ -13,11 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ==============================
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-insegura")  # Segurança
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-<<<<<<< HEAD
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"]  # Seguro para ambiente local
-=======
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "backend-lab-eng.onrender.com"]  # Seguro para ambiente local
->>>>>>> ca6e0cc8b708bec23b4bb84f57e7067d8ee97868
 
 # ==============================
 # APPS

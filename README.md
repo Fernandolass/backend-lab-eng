@@ -39,10 +39,10 @@ python manage.py popular_fake_data
 
 ### Isso criará usuários de teste:
 ```
-Usuário	        Email	               Senha	        Cargo
-Admin	        admin@teste.com        admin123         admin
-Gerente	        gerente@teste.com      gerente123       gerente
-Atendente	atendente@teste.com    atendente123	atendente
+Usuário	        Email	                  Senha	            Cargo
+Admin	          admin@teste.com         admin123          admin
+Gerente	        gerente@teste.com       gerente123        gerente
+Atendente	      atendente@teste.com     atendente123	    atendente
 ```
 ## 6. Inicie o servidor
 ```

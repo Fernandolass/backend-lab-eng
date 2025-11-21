@@ -24,6 +24,8 @@ stats_patterns = [
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('projetos/<int:projeto_id>/ambientes/<int:ambiente_id>/add-item/', views.add_material_item, name='add-item'),
     path('stats/', include(stats_patterns)),  # agrupamento limpo
+    path('materials/add/', views.add_material_simple, name='material-add'),
     path("api/token/", TokenObtainPairView.as_view(serializer_class=CustomTokenObtainPairSerializer), name="token_obtain_pair"),
 ]

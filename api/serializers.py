@@ -61,11 +61,51 @@ class MarcaSerializer(serializers.ModelSerializer):
         model = Marca
         fields = ['id', 'nome', 'created_at']
 
-
 class DescricaoMarcaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DescricaoMarca
-        fields = ['id', 'material', 'marcas']
+        fields = ["id", "material", "marcas"]
+
+
+class DescricaoMarcaSalvarSerializer(serializers.Serializer):
+    material = serializers.CharField()
+    marcas = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False
+    )
+
+    def _normalize_list(self, nomes):
+        
+        vistos_lower = set()
+        result = []
+        for n in (n.strip() for n in nomes if n and str(n).strip()):
+            lower = n.lower()
+            if lower not in vistos_lower:
+                vistos_lower.add(lower)
+                result.append(n)
+        return result
+
+    def create(self, validated_data):
+        material = validated_data["material"].strip()
+        novas = self._normalize_list(validated_data["marcas"])
+
+        
+        obj, created = DescricaoMarca.objects.get_or_create(
+            material=material,
+            defaults={"marcas": ", ".join(novas)}
+        )
+        
+       
+        atuais = [m.strip() for m in (obj.marcas or "").split(",") if m.strip()]
+        mescladas = self._normalize_list(atuais + novas)
+        obj.marcas = ", ".join(mescladas)
+        obj.save(update_fields=["marcas"])
+
+        
+        for nome in novas:
+            Marca.objects.get_or_create(nome=nome.strip())
+
+        return obj
 
 
 class MaterialSpecSerializer(serializers.ModelSerializer):

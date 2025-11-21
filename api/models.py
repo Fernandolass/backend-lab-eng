@@ -164,7 +164,7 @@ class Marca(models.Model):
 
 
 class DescricaoMarca(models.Model):
-    material = models.CharField(max_length=100)
+    material = models.CharField(max_length=100, unique=True)
     marcas = models.TextField()
     
 
@@ -181,24 +181,10 @@ class MaterialSpec(models.Model):
         ('APROVADO', 'Aprovado'),
         ('REPROVADO', 'Reprovado'),
     )
-    ITENS = (
-        ('PISO', 'Piso'),
-        ('PAREDE', 'Parede'),
-        ('TETO', 'Teto'),
-        ('RODAPE', 'Rodapé'),
-        ('SOLEIRA', 'Soleira'),
-        ('PEITORIL', 'Peitoril'),
-        ('ESQUADRIA', 'Esquadria'),
-        ('VIDRO', 'Vidro'),
-        ('PORTA', 'Porta'),
-        ('FERRAGEM', 'Ferragem'),
-        ('INST_ELETRICA', 'Inst. Elétrica'),
-        ('INST_COMUNICACAO', 'Inst. Comunicação'),
-    )
 
     projeto = models.ForeignKey('Projeto', on_delete=models.CASCADE, related_name='materiais', null=True, blank = True)
     ambiente = models.ForeignKey('Ambiente', on_delete=models.CASCADE, related_name='materials')
-    item = models.CharField(max_length=30, choices=ITENS)
+    item = models.CharField(max_length=30)
     descricao = models.TextField(blank=True)
     marca = models.ForeignKey(Marca, null=True, blank=True, on_delete=models.SET_NULL, related_name='materiais')
 
@@ -216,7 +202,7 @@ class MaterialSpec(models.Model):
         verbose_name_plural = 'Materiais do Ambiente'
 
     def __str__(self):
-        return f'{self.ambiente} - {self.get_item_display()}'
+        return f'{self.ambiente} - {self.tem}'
     
     def criar_descricao_marca_automatica(sender, instance, created, **kwargs):
         if not instance.descricao:

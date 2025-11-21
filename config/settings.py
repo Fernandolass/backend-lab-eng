@@ -1,19 +1,19 @@
-import os
 from pathlib import Path
+import os
 from dotenv import load_dotenv
 from datetime import timedelta
 
-# Carregar .env
+# Carrega o .env
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 # ==============================
 # DJANGO CORE
 # ==============================
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-insegura")  # Segurança
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-insegura")
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"]  # Seguro para ambiente local
+
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", ".onrender.com"]
 
 # ==============================
 # APPS
@@ -26,11 +26,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # Terceiros
+    # terceiros
     "rest_framework",
     "corsheaders",
 
-    # Seus Apps
+    # locais
     "api",
 ]
 
@@ -56,7 +56,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / 'api' / 'templates'],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -68,46 +68,54 @@ TEMPLATES = [
     },
 ]
 
+REACT_APP_DIR = BASE_DIR.parent / "frontend"
+
+# Adiciona o build do React como diretório de templates e arquivos estáticos
+TEMPLATES[0]["DIRS"].append(REACT_APP_DIR / "build")
+STATICFILES_DIRS = [REACT_APP_DIR / "build" / "static"]
+
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ======================================================
-# BANCO DE DADOS – AUTOMÁTICO (SQLite para teste / MySQL para produção)
-# ======================================================
-USE_SQLITE = os.getenv("USE_SQLITE", "True").lower() == "true"
-
-if USE_SQLITE:
+# ==============================
+# BANCO DE DADOS (MySQL Railway)
+# ==============================
+if DEBUG:
+    # ✔ RODANDO LOCAL → SQLite
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": BASE_DIR / "local.sqlite3",
         }
     }
 else:
+    # ✔ PRODUÇÃO → MySQL Railway
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.mysql",
-            "NAME": os.getenv("MYSQLDATABASE", ""),
-            "USER": os.getenv("MYSQLUSER", ""),
+            "NAME": os.getenv("MYSQLDATABASE", "railway"),
+            "USER": os.getenv("MYSQLUSER", "root"),
             "PASSWORD": os.getenv("MYSQLPASSWORD", ""),
-            "HOST": os.getenv("MYSQLHOST", ""),
+            "HOST": os.getenv("MYSQLHOST", "127.0.0.1"),
             "PORT": os.getenv("MYSQLPORT", "3306"),
+            "OPTIONS": {"charset": "utf8mb4"},
         }
     }
 
 # ==============================
-# CONFIGURAÇÕES GERAIS
+# CONFIG PADRÕES
 # ==============================
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "/static/"
+STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ==============================
-# REST & JWT
+# REST FRAMEWORK / JWT
 # ==============================
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -116,22 +124,25 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    "PAGE_SIZE": 10,
+     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,  # número de projetos por página
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=3),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=3),  # token dura 3 horas
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),  # refresh dura 1 dia
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # ==============================
-# CORS (para frontend local)
+# CORS (para React local)
 # ==============================
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://frontend-lab-eng.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True

@@ -153,12 +153,13 @@ class TipoAmbienteViewSet(viewsets.ModelViewSet):
             return [AllowWriteForManagerUp()]
         return [permissions.IsAuthenticated()]
 
+
 class DescricaoMarcaViewSet(viewsets.ModelViewSet):
+    queryset = DescricaoMarca.objects.all()
     serializer_class = DescricaoMarcaSerializer
 
     def get_queryset(self):
-        qs = DescricaoMarca.objects.all()
-        #se quiser, permite filtro por material
+        qs = super().get_queryset()
         material = self.request.query_params.get("material")
         if material:
             qs = qs.filter(material__iexact=material)
@@ -167,9 +168,32 @@ class DescricaoMarcaViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [permissions.IsAuthenticated()]
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'salvar']:
             return [AllowWriteForManagerUp()]
         return [permissions.IsAuthenticated()]
+
+    @action(detail=False, methods=["post"], url_path="salvar")
+    def salvar(self, request):
+        """
+        POST /api/marcas-descricao/salvar/
+        body:
+        {
+          "material": "piso",
+          "marcas": ["Portobello", "Pisolar"]
+        }
+
+        Regras:
+        - se material existir: mescla marcas novas (sem duplicar, case-insensitive)
+        - se não existir: cria com as marcas enviadas
+        """
+        from .serializers import DescricaoMarcaSalvarSerializer, DescricaoMarcaSerializer
+
+        s = DescricaoMarcaSalvarSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        obj = s.save()
+
+        return Response(DescricaoMarcaSerializer(obj).data, status=status.HTTP_201_CREATED)
+
 
 # ---------------- AMBIENTES ----------------
 class AmbienteViewSet(viewsets.ModelViewSet):
@@ -366,7 +390,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             acao='APROVACAO',
             projeto=projeto,
-            motivo=f'Item {m.get_item_display()} aprovado'
+            motivo=f'Item {m.item} aprovado'
         )
 
         return Response({'status': m.status}, status=status.HTTP_200_OK)
@@ -387,7 +411,7 @@ class MaterialSpecViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             acao='REPROVACAO',
             projeto=m.projeto,  # AGORA VEM DIRETO DO MATERIAL
-            motivo=f'Item {m.get_item_display()} reprovado: {motivo}'
+            motivo=f'Item {m.item} reprovado: {motivo}'
         )
 
         return Response({'status': m.status}, status=status.HTTP_200_OK)
@@ -430,6 +454,75 @@ def stats_mensais(request):
         data.setdefault(key, {'APROVADO': 0, 'REPROVADO': 0, 'PENDENTE': 0})
         data[key][r['status']] = r['qtd']
     return Response(data)
+
+@api_view(['POST'])
+@permission_classes([AllowWriteForManagerUp])  # somente gerente+ cria
+def add_material_item(request, projeto_id=None, ambiente_id=None):
+    """
+    POST /api/projetos/<projeto_id>/ambientes/<ambiente_id>/add-item/
+    Body:
+    {
+       "item": "Piso",
+       "descricao": "Porcelanato 60x60",
+       "marca": 3
+    }
+    """
+    from .models import Projeto, Ambiente, MaterialSpec, Marca
+
+    projeto = get_object_or_404(Projeto, pk=projeto_id)
+    ambiente = get_object_or_404(Ambiente, pk=ambiente_id)
+
+    item = request.data.get("item")
+    descricao = request.data.get("descricao", "")
+    marca_id = request.data.get("marca")
+
+    if not item:
+        return Response({"detail": "Campo 'item' é obrigatório."}, status=400)
+
+    marca_obj = None
+    if marca_id:
+        marca_obj = Marca.objects.filter(id=marca_id).first()
+
+    material = MaterialSpec.objects.create(
+        projeto=projeto,
+        ambiente=ambiente,
+        item=item,
+        descricao=descricao,
+        marca=marca_obj,
+        status="PENDENTE"
+    )
+
+    return Response(
+        {
+            "id": material.id,
+            "detail": "Item criado com sucesso.",
+            "status": material.status
+        },
+        status=201
+    )
+
+
+@api_view(['POST'])
+@permission_classes([AllowWriteForManagerUp])
+def add_material_simple(request):
+    """
+    POST /api/materials/add/
+    {
+       "projeto": 1,
+       "ambiente": 10,
+       "item": "Algo",
+       "descricao": "",
+       "marca": null
+    }
+    """
+    projeto_id = request.data.get("projeto")
+    ambiente_id = request.data.get("ambiente")
+
+    if not projeto_id or not ambiente_id:
+        return Response({"detail": "projeto e ambiente são obrigatórios."}, status=400)
+
+    return add_material_item(request, projeto_id, ambiente_id)
+
 # ---------------- JWT ----------------
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer

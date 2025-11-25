@@ -36,21 +36,6 @@ class Ambiente(models.Model):
 
     nome_do_ambiente = models.CharField(max_length=100)  # único por nome
     categoria = models.CharField(max_length=20, choices=CATEGORIA_CHOICES, default='PRIVATIVA')
-    guia_de_cores = models.CharField(max_length=255, blank=True)
-
-    piso = models.TextField(blank=True)
-    parede = models.TextField(blank=True)
-    teto = models.TextField(blank=True)
-    rodape = models.TextField(blank=True)
-    soleira = models.TextField(blank=True)
-    peitoril = models.TextField(blank=True)
-    esquadria = models.TextField(blank=True)
-    vidro = models.TextField(blank=True)
-    porta = models.TextField(blank=True)
-    ferragem = models.TextField(blank=True)
-    inst_eletrica = models.TextField(blank=True, verbose_name="Instalação Elétrica")
-    inst_comunicacao = models.TextField(blank=True, verbose_name="Instalação de Comunicação")
-
     tipo = models.ForeignKey("TipoAmbiente", on_delete=models.SET_NULL, null=True, blank=True, related_name='ambientes')
 
     class Meta:
@@ -202,7 +187,7 @@ class MaterialSpec(models.Model):
         verbose_name_plural = 'Materiais do Ambiente'
 
     def __str__(self):
-        return f'{self.ambiente} - {self.tem}'
+        return f'{self.ambiente} - {self.item}'
     
     def criar_descricao_marca_automatica(sender, instance, created, **kwargs):
         if not instance.descricao:

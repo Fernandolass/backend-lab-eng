@@ -9,6 +9,13 @@ from django.db.models.functions import TruncMonth
 from django.db.models import Count, Prefetch
 from django.core.mail import send_mail
 from django.conf import settings
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
+from django.http import HttpResponse
 
 from django.shortcuts import get_object_or_404
 
@@ -139,6 +146,120 @@ class ProjetoViewSet(viewsets.ModelViewSet):
         projeto.save(update_fields=["status", "data_atualizacao"])
         Log.objects.create(usuario=request.user, acao="REPROVACAO", projeto=projeto)
         return Response({"status": projeto.status}, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=["GET"], url_path="download-especificacao")
+    def download_especificacao(self, request, pk=None):
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT
+        from reportlab.lib import colors
+        from django.http import HttpResponse
+
+        projeto = self.get_object()
+
+        # RESPONSE PDF
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{projeto.nome_do_projeto}_especificacao.pdf"'
+
+        doc = SimpleDocTemplate(response, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+
+        # --------- CÉLULAS COM QUEBRA DE LINHA ---------
+        paragraph_style = ParagraphStyle(
+            'cell_style',
+            fontSize=10,
+            leading=12,
+            alignment=TA_LEFT
+        )
+
+        def cell(text):
+            return Paragraph(str(text).replace("\n", "<br/>"), paragraph_style)
+
+        # --------- CABEÇALHO ---------
+        story.append(Paragraph("<b>ESPECIFICAÇÃO TÉCNICA</b>", styles['Title']))
+        story.append(Spacer(1, 20))
+
+        story.append(Paragraph(f"<b>Projeto:</b> {projeto.nome_do_projeto}", styles['Normal']))
+        story.append(Paragraph(f"<b>Observações:</b> {projeto.descricao or '-'}", styles['Normal']))
+        story.append(Spacer(1, 20))
+
+        # --------- ÁREA PRIVATIVA ---------
+        story.append(Paragraph("<b>ÁREA PRIVATIVA</b>", styles['Heading2']))
+        ambientes_privativos = projeto.ambientes.filter(categoria="PRIVATIVA")
+
+        for amb in ambientes_privativos:
+            story.append(Paragraph(f"<b>{amb.nome_do_ambiente}</b>", styles['Heading3']))
+
+            materiais = projeto.materiais.filter(ambiente=amb).order_by("item")
+
+            data = [[cell("Item"), cell("Descrição")]]
+
+            for m in materiais:
+                data.append([cell(m.item), cell(m.descricao or "-")])
+
+            tabela = Table(data, colWidths=[120, 330])
+            tabela.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('GRID', (0,0), (-1,-1), 0.7, colors.black),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP')
+            ]))
+
+            story.append(tabela)
+            story.append(Spacer(1, 15))
+
+        # --------- ÁREA COMUM ---------
+        story.append(Paragraph("<b>ÁREA COMUM</b>", styles['Heading2']))
+        ambientes_comuns = projeto.ambientes.filter(categoria="COMUM")
+
+        for amb in ambientes_comuns:
+            story.append(Paragraph(f"<b>{amb.nome_do_ambiente}</b>", styles['Heading3']))
+
+            materiais = projeto.materiais.filter(ambiente=amb).order_by("item")
+
+            data = [[cell("Item"), cell("Descrição")]]
+
+            for m in materiais:
+                data.append([cell(m.item), cell(m.descricao or "-")])
+
+            tabela = Table(data, colWidths=[120, 330])
+            tabela.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('GRID', (0,0), (-1,-1), 0.7, colors.black),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('VALIGN', (0,0), (-1,-1), 'TOP')
+            ]))
+
+            story.append(tabela)
+            story.append(Spacer(1, 15))
+
+        # --------- MARCAS ---------
+        story.append(Paragraph("<b>DESCRIÇÃO DAS MARCAS</b>", styles['Heading2']))
+
+        from api.models import DescricaoMarca
+        marcas = DescricaoMarca.objects.all().order_by("material")
+
+        data = [[cell("Material"), cell("Marcas")]]
+
+        for m in marcas:
+            data.append([cell(m.material), cell(m.marcas)])
+
+        tabela = Table(data, colWidths=[150, 300])
+        tabela.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('GRID', (0,0), (-1,-1), 0.7, colors.black),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP')
+        ]))
+
+        story.append(tabela)
+
+        # FINALIZAR PDF
+        doc.build(story)
+        return response
+
     
 # --- TIPO DE AMBIENTE ---
 class TipoAmbienteViewSet(viewsets.ModelViewSet):
@@ -500,28 +621,6 @@ def add_material_item(request, projeto_id=None, ambiente_id=None):
         },
         status=201
     )
-
-
-@api_view(['POST'])
-@permission_classes([AllowWriteForManagerUp])
-def add_material_simple(request):
-    """
-    POST /api/materials/add/
-    {
-       "projeto": 1,
-       "ambiente": 10,
-       "item": "Algo",
-       "descricao": "",
-       "marca": null
-    }
-    """
-    projeto_id = request.data.get("projeto")
-    ambiente_id = request.data.get("ambiente")
-
-    if not projeto_id or not ambiente_id:
-        return Response({"detail": "projeto e ambiente são obrigatórios."}, status=400)
-
-    return add_material_item(request, projeto_id, ambiente_id)
 
 # ---------------- JWT ----------------
 class MyTokenObtainPairView(TokenObtainPairView):

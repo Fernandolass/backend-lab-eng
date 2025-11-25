@@ -144,5 +144,18 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://frontend-jn.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# ==========================================================
+# CONFIGURAÇÃO DE E-MAIL 
+# ==========================================================
+if not DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = os.getenv('EMAIL_USER')        
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_APP_PASSWORD')
+    DEFAULT_FROM_EMAIL = os.getenv('EMAIL_USER')
